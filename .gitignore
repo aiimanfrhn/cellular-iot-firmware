@@ -1,0 +1,29 @@
+# Build output
+build/
+cmake-build-*/
+*.elf
+*.hex
+*.bin
+*.map
+*.o
+*.a
+*.d
+
+# Python
+__pycache__/
+.venv/
+venv/
+*.py[cod]
+.pytest_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+secrets*
+config.local.*
+
+# Editors and OS
+.DS_Store
+.vscode/
+.idea/
