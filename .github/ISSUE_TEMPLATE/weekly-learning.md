@@ -2,7 +2,6 @@
 name: Weekly learning task
 about: Track one practical deliverable from the 12-week embedded learning plan
 title: "Week N: "
-labels: learning
 assignees: ""
 ---
 
