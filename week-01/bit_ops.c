@@ -1,49 +1,80 @@
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-static unsigned int set_bit(unsigned int value, unsigned int bit)
+#include "bit_ops.h"
+
+//Ring Buffer
+void ring_buffer_init(RingBuffer *rb)
 {
-    return value | (1u << bit);
+    rb->head = 0u;
+    rb->tail = 0u;
+    rb->count = 0u;
 }
 
-static unsigned int clear_bit(unsigned int value, unsigned int bit)
+bool ring_buffer_put(RingBuffer *rb, uint8_t value)
 {
-    return value & ~(1u << bit);
+    if (rb->count == BUFFER_SIZE) {
+        return false; // full
+    }
+
+    rb->data[rb->head] = value;
+    rb->head = (rb->head + 1u) % BUFFER_SIZE;
+    rb->count++;
+    return true;
 }
 
-static unsigned int toggle_bit(unsigned int value, unsigned int bit)
+bool ring_buffer_get(RingBuffer *rb, uint8_t *value)
 {
-    return value ^ (1u << bit);
-}
+    if (rb->count == 0u) {
+        return false; // empty
+    }
 
-static int test_bit(unsigned int value, unsigned int bit)
-{
-    return (value & (1u << bit)) != 0u;
+    *value = rb->data[rb->tail];
+    rb->tail = (rb->tail + 1u) % BUFFER_SIZE;
+    rb->count--;
+    return true;
 }
 
 int main(void)
 {
-    const unsigned int bit_count = (unsigned int)(sizeof(unsigned int) * CHAR_BIT);
-    const unsigned int bit = 3u;
-    unsigned int value = 0xA5u;
+    unsigned int value = 0b1010;
+    unsigned int bit = 4;
 
-    if (bit >= bit_count) {
-        fprintf(stderr, "Bit index must be between 0 and %u.\n", bit_count - 1u);
-        return 1;
+    value |=  (1u << bit);  // set bit 1
+    printf("Set:     %u\n", value);
+
+    value &= ~(1u << bit);  // clear bit 1
+    printf("Cleared: %u\n", value);
+
+    value ^=  (1u << bit);  // toggle bit 1
+    printf("Toggled: %u\n", value);
+
+    memset(&value, 0, sizeof(value));  // reset value to 0
+    printf("Reset:   %u\n", value);
+
+    RingBuffer rb;
+    uint8_t byte;
+
+    ring_buffer_init(&rb);
+    ring_buffer_put(&rb, 'A');
+    ring_buffer_put(&rb, 'B');
+    ring_buffer_put(&rb, 'C');
+    ring_buffer_put(&rb, 'D');
+    ring_buffer_put(&rb, 'E');
+    ring_buffer_put(&rb, 'F');
+
+    while (ring_buffer_get(&rb, &byte)) {
+        printf("%c\n", byte);
     }
 
-    printf("Initial value: 0x%X\n", value);
-    printf("Bit %u is %s\n", bit, test_bit(value, bit) ? "set" : "clear");
+    byte = 'Z';
 
-    value = set_bit(value, bit);
-    printf("After setting bit %u: 0x%X\n", bit, value);
+    memset(&rb, 0, sizeof(rb));  // reset ring buffer
+    printf("Ring buffer reset: %c\n", byte);
 
-    value = clear_bit(value, bit);
-    printf("After clearing bit %u: 0x%X\n", bit, value);
-
-    value = toggle_bit(value, bit);
-    printf("After toggling bit %u: 0x%X\n", bit, value);
-    printf("Bit %u is %s\n", bit, test_bit(value, bit) ? "set" : "clear");
-
-    return 0;
 }
+
