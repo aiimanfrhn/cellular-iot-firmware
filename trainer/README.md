@@ -21,7 +21,9 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 
 Drafts and the last passing state live in this browser's local storage. Clearing browser site data removes them. The C compiler and submitted program run inside a WebAssembly worker, isolated by the browser. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
 
-The ring-buffer exercise uses `RingBuffer` and the `rb_init`, `rb_push`, and `rb_pop` signatures shown in the starter. Its checker verifies empty/full behavior, FIFO order, wraparound, and zero capacity.
+The ring-buffer exercise uses `RingBuffer` and the `rb_init`, `rb_push`, and `rb_pop` signatures shown in the starter. Its checker verifies empty/full behavior, FIFO order, wraparound, repeated drain/refill, long runs across many wraps, re-initialisation, and zero capacity.
+
+The checks live in `checks.js`. Each exercise lists `[label, C expression]` pairs; every check runs and the page shows a pass/fail checklist. If the program crashes (for example an out-of-bounds write), the checker re-runs each check on its own to report which ones crashed. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
 
 ## Deploy to Vercel
 

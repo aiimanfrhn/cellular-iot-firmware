@@ -180,7 +180,7 @@ button:focus-visible {
 .lock-icon { font: 10.5px var(--mono); color: var(--amber); }
 .week-item.complete .week-state { color: var(--green); }
 .week-item.locked { opacity: .62; }
-.lock-icon { color: var(--faint); }
+.lock-icon { color: var(--faint); letter-spacing: .4px; }
 .more-weeks { font-size: 12px; color: var(--faint); padding: 13px 8px; }
 .issue-link {
   display: flex;
@@ -410,6 +410,33 @@ button:focus-visible {
   overflow: auto;
 }
 .compiler-label { font: 11px var(--mono); color: var(--faint); white-space: nowrap; }
+
+.check-list {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 4px 18px;
+  font-size: 13px;
+}
+.check-list li { display: flex; align-items: baseline; gap: 8px; color: var(--ink); }
+.check-list small { color: var(--faint); font-size: 11.5px; }
+.check-mark { flex: 0 0 14px; font: 600 12px var(--mono); text-align: center; }
+.check-pass .check-mark { color: var(--green); }
+.check-fail .check-mark,
+.check-crash .check-mark { color: var(--red); }
+.check-skipped { color: var(--faint); }
+.check-skipped .check-mark { color: var(--faint); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .result-panel.success { background: #f0f8f3; border-color: #cce7d7; }
 .result-panel.success .result-icon { background: #d9f0e2; color: var(--green); }
 .result-panel.failure { background: #fff8f6; border-color: #f1d6ce; }
@@ -460,6 +487,8 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .run-row { align-items: stretch; gap: 10px; flex-direction: column-reverse; }
   .run-button { width: 100%; padding: 13px 17px; }
   .local-label { font-size: 11px; }
+  .result-panel { flex-wrap: wrap; }
+  .compiler-label { flex-basis: 100%; padding-left: 35px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
