@@ -10,7 +10,6 @@ if (root) {
     <div class="cloud-heading"><div><span class="eyebrow">CLOUD BACKUP</span><h2>Your account</h2></div><span id="cloud-state">Loading…</span></div>
     <p class="cloud-copy">Sign in to sync passed exercises. Your C source stays here unless you explicitly submit it.</p>
     <form id="cloud-email-form" class="cloud-form"><label for="cloud-email">Email</label><input id="cloud-email" type="email" autocomplete="email" required placeholder="you@example.com"><button type="submit">Send sign-in code</button></form>
-    <form id="cloud-otp-form" class="cloud-form hidden"><label for="cloud-otp">Email sign-in code</label><input id="cloud-otp" inputmode="numeric" autocomplete="one-time-code" required placeholder="Enter the code"><button type="submit">Verify and sign in</button></form>
     <div id="cloud-user-actions" class="cloud-actions hidden"><button id="cloud-submit" type="button">Submit checked code</button><button id="cloud-signout" class="cloud-signout" type="button">Sign out</button></div>
     <p id="cloud-message" class="cloud-message" aria-live="polite"></p>
     <ul id="cloud-progress" class="cloud-progress"></ul>`;
@@ -59,7 +58,6 @@ if (root) {
       user = session?.user || null;
       $('cloud-state').textContent = user ? 'Signed in · ' + (user.email || 'account') : 'Not signed in';
       $('cloud-email-form').classList.toggle('hidden', !!user);
-      $('cloud-otp-form').classList.add('hidden');
       $('cloud-user-actions').classList.toggle('hidden', !user);
       $('cloud-progress').replaceChildren();
       lastSynced = '';
@@ -70,19 +68,9 @@ if (root) {
       e.preventDefault();
       const email = $('cloud-email').value.trim();
       $('cloud-state').textContent = 'Sending code…';
-      const { error } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+      const { error } = await db.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: window.location.origin } });
       if (error) { $('cloud-state').textContent = 'Not signed in'; message('Could not send code: ' + error.message, true); return; }
-      $('cloud-otp-form').classList.remove('hidden');
-      $('cloud-otp').focus();
-      message('Sign-in code sent to ' + email + '.');
-    });
-    $('cloud-otp-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const { data, error } = await db.auth.verifyOtp({
-        email: $('cloud-email').value.trim(), token: $('cloud-otp').value.trim(), type: 'email'
-      });
-      if (error) { message('Could not verify code: ' + error.message, true); return; }
-      await setSession(data.session);
+      message('Sign-in link sent to ' + email + '. Open the link in this browser to connect your account.');
     });
     $('cloud-signout').addEventListener('click', async () => {
       const { error } = await db.auth.signOut();
