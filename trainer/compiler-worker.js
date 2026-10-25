@@ -8,7 +8,8 @@ async function getCompiler() {
     self.postMessage({type:'loading', message:'Loading browser compiler…'});
     let lastPercent = -1;
     compilerPromise = createCompiler('c', {
-      baseUrl:new URL('/clang/', self.location.href),
+      // The single-file build sets this to a CDN copy of the compiler assets.
+      baseUrl:new URL(import.meta.env.VITE_CLANG_BASE_URL || '/clang/', self.location.href),
       onProgress:(value) => {
         const percent = Math.floor(value * 100);
         if (percent === lastPercent) return;

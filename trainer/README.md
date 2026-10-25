@@ -29,6 +29,10 @@ pnpm dev
 
 Open the local URL shown by Vite. Use `pnpm build` to create a static production site in `dist/`.
 
+### One-file version for offline study
+
+`pnpm build:single` writes the whole trainer (problems, training plan, concept quiz and checker) into one file, `dist-single/embedded-c-trainer.html`. Open it straight from disk in Chrome, Edge or Firefox; no server is needed. The ~28 MB compiler runtime is too large to embed, so the file downloads it from jsDelivr the first time you run checks and the browser caches it. Supabase sync is not included; progress stays in that browser. Rebuild it after changing `problems.js`, `plan.js` or `quiz.js`.
+
 ## Workflow
 
 1. Pick a problem from the sidebar (or the picker on a phone), edit the C code, and choose **Run checks** (Ctrl+Enter).
