@@ -32,7 +32,7 @@ Import the GitHub repository into Vercel and set **Root Directory** to `trainer`
 
 ## Supabase cloud progress
 
-The trainer can back up Week 1 pass status and store code only after the learner chooses **Submit checked code**. Email OTP sign-in is provided by Supabase Auth. Each table uses row-level security so a signed-in learner can access only their own records. The browser uses a publishable key; never put a service-role key in the site.
+The trainer can back up Week 1 pass status and store code only after the learner chooses **Submit checked code**. Email magic-link sign-in is provided by Supabase Auth. Each table uses row-level security so a signed-in learner can access only their own records. The browser uses a publishable key; never put a service-role key in the site.
 
 1. Apply `supabase-schema.sql` to the selected Supabase project's SQL Editor.
 2. In Vercel, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for Production, Preview, and Development, then redeploy.
