@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+  <title>Embedded C Trainer</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Embedded C Trainer home"><span class="brand-mark">C</span><span>Embedded C <b>Trainer</b></span></a>
+    <div class="header-status"><span class="status-dot" id="server-dot"></span><span id="server-status">Connecting to local checker…</span></div>
+  </header>
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="eyebrow">YOUR 12-WEEK TRACK</div>
+      <h1>Build firmware skills<br>one deliverable at a time.</h1>
+      <p class="intro">Use your modem and certification experience as a head start. Practice the C and MCU skills employers expect to see in working code.</p>
+      <section class="progress-card" aria-live="polite">
+        <div class="progress-heading"><div><span class="eyebrow">WEEK 1</span><h2>C refresh</h2></div><strong id="progress-count">0 / 2</strong></div>
+        <div class="progress-track"><span id="progress-fill"></span></div>
+        <p id="progress-caption">Pass both checks to complete this week.</p>
+        <div class="stat-row"><span>Exercises passed</span><b id="passed-count">0</b></div>
+        <div class="stat-row"><span>Last activity</span><b id="last-activity">Not started</b></div>
+      </section>
+      <div class="week-list"><div class="week-item current"><span class="week-number">01</span><span><b>Embedded C refresh</b><small>Bit operations · Ring buffer</small></span><span class="week-state" id="week-state">IN PROGRESS</span></div>
+        <div class="week-item locked"><span class="week-number">02</span><span><b>Memory and interfaces</b><small>Pointers · UART framing</small></span><span class="lock-icon">02</span></div>
+        <div class="week-item locked"><span class="week-number">03</span><span><b>MCU foundations</b><small>GPIO · Timers · Interrupts</small></span><span class="lock-icon">03</span></div>
+        <div class="more-weeks">Weeks 4–12: drivers, RTOS, modem control, testing and portfolio</div>
+      </div>
+      <a class="issue-link" href="https://github.com/aiimanfrhn/cellular-iot-firmware/issues/1" target="_blank" rel="noreferrer">Open Week 1 GitHub issue <span>↗</span></a>
+    </aside>
+    <section class="workspace">
+      <div class="workspace-head"><div><div class="eyebrow">PRACTICE LAB · WEEK 01</div><h2>Make progress you can see.</h2></div><span class="local-label"><span></span> Runs on this computer</span></div>
+      <div class="exercise-tabs" role="tablist" aria-label="Week 1 exercises">
+        <button class="exercise-tab active" data-exercise="bit_ops" role="tab" aria-selected="true"><span class="tab-check" id="tab-check-bit_ops">1</span><span><b>Bit operations</b><small>Bit masks and shifts</small></span><span class="tab-result" id="tab-result-bit_ops">Not checked</span></button>
+        <button class="exercise-tab" data-exercise="ring_buffer" role="tab" aria-selected="false"><span class="tab-check" id="tab-check-ring_buffer">2</span><span><b>Ring buffer</b><small>FIFO data structure</small></span><span class="tab-result" id="tab-result-ring_buffer">Not checked</span></button>
+      </div>
+      <article class="exercise-panel">
+        <div class="exercise-title"><div><span class="eyebrow" id="exercise-kicker">EXERCISE 1 · C BASICS</span><h3 id="exercise-title">Bit operations</h3></div><span class="difficulty">FOUNDATION</span></div>
+        <p class="exercise-description" id="exercise-description"></p>
+        <div class="requirements" id="requirements"></div>
+        <div class="editor-head"><label for="code-editor">Your C code <span>· saved automatically in this browser</span></label><div class="editor-actions"><button class="text-button" id="reset-button" type="button">Reset starter</button><button class="text-button" id="download-button" type="button">Download .c</button></div></div>
+        <div class="editor-wrap"><div class="line-numbers" id="line-numbers" aria-hidden="true">1</div><textarea id="code-editor" aria-label="C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
+        <div class="run-row"><div class="run-hint" id="save-hint">Edits stay in this browser until you download them.</div><button id="run-button" class="run-button" type="button"><span>▶</span> Run checks</button></div>
+        <section class="result-panel idle" id="result-panel" aria-live="polite"><div class="result-icon" id="result-icon">↳</div><div class="result-content"><b id="result-title">Ready when you are</b><p id="result-message">Run the checks to compile your code and see exactly what passes.</p><pre id="result-output" hidden></pre></div><span id="result-compiler" class="compiler-label"></span></section>
+        <div class="commit-tip"><span class="tip-icon">↗</span><span><b>Keep your GitHub streak going.</b> Download the checked file, add it to your repository, then commit and push with SSH.</span></div>
+      </article>
+      <footer>Each check compiles your code with strict C11 warnings and runs focused tests. Your code stays on this computer.</footer>
+    </section>
+  </main>
+</body>
+</html>
