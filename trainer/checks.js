@@ -132,13 +132,13 @@ ${lines.join('\n')}
 }
 
 /* #line directives make compiler diagnostics point at the learner's own file
-   and line numbers, matching the editor gutter. */
+   and line numbers, matching the editor gutter. The learner's own main (if
+   any) is renamed so it does not clash with the checker's; runProgram runs
+   it separately. */
 export function makeSource(exercise, filename, code) {
   const spec = CHECKS[exercise];
   if (!spec) throw new Error('Unknown exercise.');
-  const learner = exercise === 'bit_ops'
-    ? `#define main learner_demo_main\n#line 1 "${filename}"\n${code}\n#undef main`
-    : `#line 1 "${filename}"\n${code}`;
+  const learner = `#define main learner_demo_main\n#line 1 "${filename}"\n${code}\n#undef main`;
   return `${learner}\n#line 1 "checker.c"\n${harness(spec)}`;
 }
 
@@ -164,6 +164,23 @@ const CRASH_HINT = 'Look for a NULL or out-of-bounds pointer, or an index that n
 /* Compile and run the checks. Returns the result object the page renders:
    { passed, phase, message, output, checks: [{label, state}], compiler }
    where state is 'pass' | 'fail' | 'crash' | 'skipped'. */
+const hasMain = (code) => /\bmain\s*\(/.test(code.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''));
+
+/* Compile and run the learner's code on its own, so they can see what their
+   main() prints. Returns { state, output, exitCode?, ms? } where state is
+   'none' (no main), 'ran', 'error' (did not build) or 'crash'. */
+export async function runProgram(compiler, filename, code) {
+  if (!hasMain(code)) return { state: 'none', output: '' };
+  try {
+    const run = await compiler.run(`#line 1 "${filename}"\n${code}`, '', { compileArgs: COMPILE_ARGS });
+    if (run.errors.length) return { state: 'error', output: run.errors.join('\n') };
+    return { state: 'ran', output: run.output, exitCode: run.exitCode, ms: Math.round(run.runMs ?? 0) };
+  } catch (error) {
+    // A trap discards everything the program printed, so only the error is left.
+    return { state: 'crash', output: `Runtime error: ${error?.message ?? error}\nAnything printed before the crash is lost. Look for abort(), a bad pointer, or an out-of-bounds index.` };
+  }
+}
+
 export async function runChecks(compiler, exercise, filename, code) {
   const spec = CHECKS[exercise];
   if (!spec) throw new Error(`Unknown exercise: ${exercise}`);

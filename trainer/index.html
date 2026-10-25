@@ -47,6 +47,7 @@
         <div class="editor-wrap"><div class="line-numbers" id="line-numbers" aria-hidden="true">1</div><textarea id="code-editor" aria-label="C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
         <div class="run-row"><div class="run-hint" id="save-hint">Edits stay in this browser until you download them.</div><button id="run-button" class="run-button" type="button"><span>▶</span> Run checks</button></div>
         <section class="result-panel idle" id="result-panel" aria-live="polite"><div class="result-icon" id="result-icon">↳</div><div class="result-content"><b id="result-title">Ready when you are</b><p id="result-message">Run the checks to compile your code and see exactly what passes.</p><ul class="check-list" id="check-list" hidden></ul><pre id="result-output" hidden></pre></div><span id="result-compiler" class="compiler-label"></span></section>
+        <section class="program-panel" id="program-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span id="program-meta"></span></div><pre id="program-output"></pre><p id="program-note" hidden></p></section>
         <div class="commit-tip"><span class="tip-icon">↗</span><span><b>Keep your GitHub streak going.</b> Download the checked file, add it to your repository, then commit and push with SSH.</span></div>
       </article>
       <footer>Each check compiles your code with strict C11 warnings and runs focused tests. Your code stays on this computer.</footer>

@@ -1,5 +1,5 @@
 import { createCompiler } from '@live-codes/clang-wasm';
-import { runChecks } from './checks.js';
+import { runChecks, runProgram } from './checks.js';
 
 let compilerPromise;
 
@@ -32,7 +32,12 @@ self.addEventListener('message', async (event) => {
   }
   try {
     self.postMessage({type:'loading', message:'Compiling and running checks…'});
-    self.postMessage({type:'result', result:await runChecks(compiler, exercise, filename, code)});
+    const result = await runChecks(compiler, exercise, filename, code);
+    if (result.phase !== 'compile') {
+      self.postMessage({type:'loading', message:'Running your program…'});
+      result.program = await runProgram(compiler, filename, code);
+    }
+    self.postMessage({type:'result', result});
   } catch (error) {
     self.postMessage({type:'result', result:{passed:false,phase:'setup',message:'The checker hit an unexpected error. Refresh the page and try again.',output:String(error),checks:[]}});
   }

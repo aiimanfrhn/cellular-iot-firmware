@@ -23,7 +23,7 @@ Drafts and the last passing state live in this browser's local storage. Clearing
 
 The ring-buffer exercise uses `RingBuffer` and the `rb_init`, `rb_push`, and `rb_pop` signatures shown in the starter. Its checker verifies empty/full behavior, FIFO order, wraparound, repeated drain/refill, long runs across many wraps, re-initialisation, and zero capacity.
 
-The checks live in `checks.js`. Each exercise lists `[label, C expression]` pairs; every check runs and the page shows a pass/fail checklist. If the program crashes (for example an out-of-bounds write), the checker re-runs each check on its own to report which ones crashed. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
+The checks live in `checks.js`. Each exercise lists `[label, C expression]` pairs; every check runs and the page shows a pass/fail checklist. If the program crashes (for example an out-of-bounds write), the checker re-runs each check on its own to report which ones crashed. After the checks, the learner's own `main` (if their code has one) is compiled and run on its own, and its output and exit code appear in the **Program output** panel; the checker renames it so it never clashes with the checker's `main`. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
 
 ## Deploy to Vercel
 
