@@ -21,11 +21,13 @@
       <h1>Practise the C questions <br>platform interviews ask.</h1>
       <p class="intro">Classic problems on bits, memory, lists and strings, plus packet parsing, switching and hardware for network platform roles. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
       <button class="plan-button" id="plan-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">14</span><span class="plan-button-text"><b id="plan-button-label">Open the training plan</b><small id="plan-button-meta">14 days of problems and study</small></span></button>
+      <button class="plan-button" id="quiz-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">?</span><span class="plan-button-text"><b id="quiz-button-label">Take the concept quiz</b><small id="quiz-button-meta">Multiple-choice interview questions</small></span></button>
       <section class="progress-card" aria-live="polite">
         <div class="progress-heading"><div><span class="eyebrow">YOUR PROGRESS</span><h2>Problems solved</h2></div><strong id="progress-count">0 / 0</strong></div>
         <div class="progress-track"><span id="progress-fill"></span></div>
         <p id="progress-caption">Solve a problem to get started.</p>
         <div id="difficulty-stats"></div>
+        <div class="stat-row"><span>Quiz answered correctly</span><b id="quiz-progress">0 / 0</b></div>
         <div class="stat-row"><span>Last activity</span><b id="last-activity">Not started</b></div>
       </section>
       <nav class="problem-list" id="problem-list" aria-label="Problems"></nav>
@@ -48,6 +50,22 @@
         <div class="plan-head"><p class="plan-intro" id="plan-intro"></p><div class="plan-total"><strong id="plan-count">0 / 0</strong><span>tasks done</span></div></div>
         <div class="progress-track"><span id="plan-fill"></span></div>
         <ol class="plan-days" id="plan-days"></ol>
+      </article>
+      <article class="plan-panel quiz-panel" id="quiz-panel" tabindex="-1" hidden>
+        <div class="quiz-topics" id="quiz-topics" role="group" aria-label="Quiz topic"></div>
+        <div id="quiz-question">
+          <div class="quiz-meta"><span id="quiz-position">Question 1 of 6</span><span class="quiz-dots" id="quiz-dots" aria-hidden="true"></span></div>
+          <div class="quiz-prompt" id="quiz-prompt"></div>
+          <div class="quiz-options" id="quiz-options" role="radiogroup" aria-labelledby="quiz-prompt"></div>
+          <section class="quiz-feedback" id="quiz-feedback" aria-live="polite" hidden><b id="quiz-verdict"></b><p id="quiz-explain"></p></section>
+          <div class="run-row"><div class="run-hint">Keys 1–4 choose an answer · Enter checks it</div><button id="quiz-check" class="run-button" type="button">Check answer</button></div>
+        </div>
+        <div id="quiz-summary" class="quiz-summary" hidden aria-live="polite">
+          <div class="quiz-score" id="quiz-score">0 / 0</div>
+          <h3 id="quiz-summary-title">Topic complete</h3>
+          <p id="quiz-summary-text"></p>
+          <div class="quiz-summary-actions"><button id="quiz-retry" class="next-button" type="button">Retry the ones you missed</button><button id="quiz-next-topic" class="run-button" type="button">Next topic →</button></div>
+        </div>
       </article>
       <footer>Each check compiles your code as strict C11 with warnings as errors and undefined-behaviour traps, then runs focused tests. Your code stays on this computer.</footer>
     </section>

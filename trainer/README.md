@@ -14,6 +14,8 @@ A browser-based practice site for embedded, firmware and network platform softwa
 
 A **14-day training plan** (the button under the introduction) orders the problems for network platform software roles, such as C developers on switches, routers and access points. It adds study questions on networking, Linux, concurrency, debugging and behavioural interviews, which you tick off as you go. The plan lives in `plan.js`.
 
+A **concept quiz** (the button under the plan) covers the spoken part of the interview: 42 multiple-choice questions with explanations, in seven topics (C and the compiler, interrupts and concurrency, RTOS, memory, hardware and buses, reliability and boot, networking), plus a shuffled mixed review. Keys 1–4 choose an answer and Enter checks it. After a topic you can retry just the questions you missed. Questions live in `quiz.js`.
+
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
 ## Run locally
@@ -34,7 +36,7 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 3. Read the follow-up questions and practise answering them out loud.
 4. Choose **Download .c** to keep your solution, for example in your portfolio repository.
 
-Drafts, results and ticked plan items live in this browser's local storage. Clearing browser site data removes them. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
+Drafts, results, ticked plan items and quiz answers live in this browser's local storage. Clearing browser site data removes them. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
 
 ## How checking works
 

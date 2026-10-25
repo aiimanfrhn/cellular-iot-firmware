@@ -1,5 +1,6 @@
 import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
 import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
+import { QUIZ, QUIZ_TOPICS } from './quiz.js';
 
 (() => {
   /* Problem data lives in problems.js; the sidebar list, the mobile picker
@@ -20,6 +21,7 @@ import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
   if (!saved.code) saved.code = {};
   if (!saved.results) saved.results = {};
   if (!saved.plan) saved.plan = {};   // study items ticked off in the training plan
+  if (!saved.quiz) saved.quiz = {};   // concept quiz answers, keyed by question id
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {} }
 
   let active = EXERCISES[saved.active] ? saved.active : ORDER[0];
@@ -164,7 +166,7 @@ import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
       row.append(name, value);
       return row;
     }));
-    const dates = Object.values(saved.results).map((r) => r && r.at).filter(Boolean).sort();
+    const dates = [...Object.values(saved.results), ...Object.values(saved.quiz)].map((r) => r && r.at).filter(Boolean).sort();
     $('last-activity').textContent = dateLabel(dates[dates.length - 1] || saved.lastEdit);
     ORDER.forEach((id) => {
       const state = problemState(id);
@@ -176,6 +178,7 @@ import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
     });
     $('next-button').hidden = !(isSolved(active) && nextProblem());
     renderPlan();
+    renderQuizProgress();
   }
 
   /* ---------------------------------------------------------- training plan
@@ -267,18 +270,168 @@ import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
     $('plan-button-meta').textContent = `${done} of ${PLAN_TOTAL} tasks done`;
   }
 
-  /* The workspace shows either the open problem or the training plan. */
+  /* ------------------------------------------------------------ concept quiz
+   * One question at a time: pick an option, check it, read the explanation.
+   * saved.quiz[id] = { correct (ever answered correctly), last, at }. */
+  const QUESTIONS = Object.fromEntries(QUIZ.map((q) => [q.id, q]));
+  const MIXED = { id: 'mixed', title: 'Mixed review', summary: 'All topics, shuffled' };
+  const QUIZ_SETS = [MIXED, ...QUIZ_TOPICS];
+  const quizCorrect = (id) => !!saved.quiz[id]?.correct;
+  let quiz = null;   // { set, order, index, selected, checked, session }
+
+  const idsFor = (setId) => (setId === MIXED.id ? QUIZ : QUIZ.filter((q) => q.topic === setId)).map((q) => q.id);
+
+  function shuffled(ids) {
+    const out = [...ids];
+    for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+    return out;
+  }
+
+  function startQuiz(setId, order = setId === MIXED.id ? shuffled(idsFor(setId)) : idsFor(setId)) {
+    quiz = { set: setId, order, index: 0, selected: null, checked: false, session: {} };
+    saved.quizSet = setId;
+    persist();
+    renderQuiz();
+  }
+
+  function buildQuizTopics() {
+    $('quiz-topics').replaceChildren(...QUIZ_SETS.map((set) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'quiz-topic';
+      button.dataset.quiz = set.id;
+      button.title = set.summary;
+      button.innerHTML = '<span></span><small></small>';
+      button.querySelector('span').textContent = set.title;
+      button.addEventListener('click', () => { startQuiz(set.id); focusQuiz(); });
+      return button;
+    }));
+  }
+
+  function renderQuizProgress() {
+    const correct = QUIZ.filter((q) => quizCorrect(q.id)).length;
+    $('quiz-progress').textContent = `${correct} / ${QUIZ.length}`;
+    $('quiz-button-meta').textContent = correct ? `${correct} of ${QUIZ.length} answered correctly` : `${QUIZ.length} interview questions in ${QUIZ_TOPICS.length} topics`;
+    document.querySelectorAll('.quiz-topic').forEach((button) => {
+      const ids = idsFor(button.dataset.quiz);
+      const done = ids.filter(quizCorrect).length;
+      button.classList.toggle('complete', done === ids.length);
+      button.setAttribute('aria-pressed', String(!!quiz && quiz.set === button.dataset.quiz));
+      button.querySelector('small').textContent = done === ids.length ? '✓' : `${done}/${ids.length}`;
+    });
+  }
+
+  function renderQuiz() {
+    const set = QUIZ_SETS.find((t) => t.id === quiz.set);
+    $('exercise-kicker').textContent = `CONCEPT QUIZ · ${QUIZ.length} QUESTIONS`;
+    $('exercise-title').textContent = set.title;
+    const finished = quiz.index >= quiz.order.length;
+    $('quiz-question').hidden = finished;
+    $('quiz-summary').hidden = !finished;
+    $('quiz-dots').replaceChildren(...quiz.order.map((id, i) => {
+      const dot = document.createElement('span');
+      dot.className = id in quiz.session ? (quiz.session[id] ? 'right' : 'wrong') : i === quiz.index ? 'current' : '';
+      return dot;
+    }));
+    renderQuizProgress();
+    if (finished) { renderQuizSummary(); return; }
+
+    const q = QUESTIONS[quiz.order[quiz.index]];
+    $('quiz-position').textContent = `Question ${quiz.index + 1} of ${quiz.order.length}`;
+    $('quiz-prompt').innerHTML = q.prompt;
+    $('quiz-options').replaceChildren(...q.options.map((text, i) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'quiz-option';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', String(quiz.selected === i));
+      if (quiz.selected === i) button.classList.add('selected');
+      if (quiz.checked) {
+        button.disabled = true;
+        if (i === q.answer) button.classList.add('correct');
+        else if (i === quiz.selected) button.classList.add('wrong');
+      }
+      button.innerHTML = `<span class="quiz-key">${i + 1}</span><span>${text}</span>`;
+      button.addEventListener('click', () => chooseOption(i));
+      return button;
+    }));
+    const feedback = $('quiz-feedback');
+    feedback.hidden = !quiz.checked;
+    if (quiz.checked) {
+      const right = quiz.selected === q.answer;
+      feedback.className = `quiz-feedback ${right ? 'success' : 'failure'}`;
+      $('quiz-verdict').textContent = right ? '✓ Correct' : `✗ Not quite. The answer is ${q.answer + 1}.`;
+      $('quiz-explain').innerHTML = q.explain;
+    }
+    const check = $('quiz-check');
+    check.disabled = !quiz.checked && quiz.selected === null;
+    check.textContent = !quiz.checked ? 'Check answer' : quiz.index + 1 < quiz.order.length ? 'Next question →' : 'See results →';
+  }
+
+  function renderQuizSummary() {
+    const total = quiz.order.length;
+    const right = quiz.order.filter((id) => quiz.session[id]).length;
+    const missed = total - right;
+    $('quiz-score').textContent = `${right} / ${total}`;
+    $('quiz-summary-title').textContent = right === total ? 'All correct. Nicely done.' : right >= total * 0.7 ? 'Good work.' : 'Worth another pass.';
+    $('quiz-summary-text').textContent = missed
+      ? `You missed ${missed}. Read the explanations again, then retry just those questions.`
+      : 'Now try explaining each answer out loud, as you would in an interview.';
+    $('quiz-retry').hidden = !missed;
+    $('quiz-retry').textContent = `Retry the ${missed} you missed`;
+    const i = QUIZ_SETS.findIndex((t) => t.id === quiz.set);
+    $('quiz-next-topic').textContent = i + 1 < QUIZ_SETS.length ? `Next: ${QUIZ_SETS[i + 1].title} →` : 'Start again →';
+  }
+
+  /* Move focus into the quiz so Enter checks the answer instead of
+     re-pressing whichever button opened it. */
+  const focusQuiz = () => $('quiz-panel').focus({ preventScroll: true });
+
+  function chooseOption(i) {
+    if (quiz.checked) return;
+    quiz.selected = i;
+    renderQuiz();
+  }
+
+  function checkOrAdvance() {
+    if (!quiz || quiz.index >= quiz.order.length) return;
+    if (!quiz.checked) {
+      if (quiz.selected === null) return;
+      const id = quiz.order[quiz.index];
+      const right = quiz.selected === QUESTIONS[id].answer;
+      quiz.checked = true;
+      quiz.session[id] = right;
+      saved.quiz[id] = { correct: right || quizCorrect(id), last: right, at: new Date().toISOString() };
+      persist();
+      renderProgress();   // updates "Last activity"
+    } else {
+      quiz.index++;
+      quiz.selected = null;
+      quiz.checked = false;
+    }
+    renderQuiz();
+    $('quiz-check').focus();
+  }
+
+  /* The workspace shows the open problem, the training plan or the quiz. */
   function showView(next) {
-    const plan = next === 'plan';
+    const plan = next === 'plan', inQuiz = next === 'quiz';
     saved.view = next;
     persist();
     $('plan-panel').hidden = !plan;
-    $('exercise-panel').hidden = plan;
+    $('quiz-panel').hidden = !inQuiz;
+    $('exercise-panel').hidden = plan || inQuiz;
     $('plan-button').setAttribute('aria-pressed', String(plan));
     $('plan-button-label').textContent = plan ? 'Back to the problem' : 'Open the training plan';
+    $('quiz-button').setAttribute('aria-pressed', String(inQuiz));
+    $('quiz-button-label').textContent = inQuiz ? 'Back to the problem' : 'Take the concept quiz';
     if (plan) {
       $('exercise-kicker').textContent = `TRAINING PLAN · ${PLAN.length} DAYS`;
       $('exercise-title').textContent = PLAN_TITLE;
+    }
+    if (inQuiz) {
+      if (quiz) renderQuiz();
+      else startQuiz(QUIZ_SETS.some((t) => t.id === saved.quizSet) ? saved.quizSet : QUIZ_TOPICS[0].id);
     }
   }
 
@@ -488,6 +641,31 @@ import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
     else showView('plan');
   });
 
+  $('quiz-button').addEventListener('click', () => {
+    if (saved.view === 'quiz') selectExercise(active);
+    else { showView('quiz'); focusQuiz(); }
+  });
+
+  $('quiz-check').addEventListener('click', checkOrAdvance);
+  $('quiz-retry').addEventListener('click', () => startQuiz(quiz.set, quiz.order.filter((id) => !quiz.session[id])));
+  $('quiz-next-topic').addEventListener('click', () => {
+    const i = QUIZ_SETS.findIndex((t) => t.id === quiz.set);
+    startQuiz(QUIZ_SETS[(i + 1) % QUIZ_SETS.length].id);
+  });
+
+  /* In the quiz, keys 1-9 choose an option and Enter checks or moves on. */
+  document.addEventListener('keydown', (event) => {
+    if (saved.view !== 'quiz' || !quiz || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest('input, textarea, select')) return;
+    if (/^[1-9]$/.test(event.key) && quiz.index < quiz.order.length) {
+      const i = Number(event.key) - 1;
+      if (i < QUESTIONS[quiz.order[quiz.index]].options.length) { event.preventDefault(); chooseOption(i); }
+    } else if (event.key === 'Enter' && !event.target.closest('button')) {
+      event.preventDefault();
+      checkOrAdvance();
+    }
+  });
+
   $('reset-button').addEventListener('click', () => {
     const starter = EXERCISES[active].starter;
     if (editor.value !== starter && !confirm('Replace your draft with the starter code? Your current code for this exercise will be lost. Download it first if you want to keep it.')) return;
@@ -518,7 +696,8 @@ import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
   const startView = saved.view;
   buildProblemList();
   buildPlan();
+  buildQuizTopics();
   startChecker();
   selectExercise(active);
-  if (startView === 'plan') showView('plan');
+  if (startView === 'plan' || startView === 'quiz') showView(startView);
 })();
