@@ -35,6 +35,31 @@ export const NOTES = [
     ],
   },
 
+  /* ==================================================== Pointers and arrays */
+  {
+    id: 'pointers', title: 'Pointers and arrays', summary: 'Addresses, arithmetic, decay, pointers to pointers, function pointers',
+    topics: ['pointers'], days: [2],
+    remember: [
+      '<code>&amp;x</code> is the address of <code>x</code>; <code>*p</code> is the object <code>p</code> points at.',
+      'C passes arguments by value: to change the caller\'s variable, pass its address (<code>swap(&amp;x, &amp;y)</code>).',
+      '<code>a[i]</code> is <code>*(a + i)</code>; <code>p + 1</code> moves <code>sizeof *p</code> bytes.',
+      'Subtracting two pointers into one array gives the number of elements between them.',
+      'A pointer one past the end may be compared but never dereferenced.',
+      '<code>char a[] = "hi"</code> is a writable copy (3 bytes); <code>const char *b = "hi"</code> points to a read-only literal.',
+      '<code>int m[3][4]</code>: <code>m[i][j]</code> is element <code>i * 4 + j</code>; functions need the column count.',
+      'Change a caller\'s pointer by passing a pointer to it: <code>uint8_t **out</code>.',
+      '<code>void *</code> cannot be dereferenced; convert it to a typed pointer first.',
+      'Function pointer type: <code>typedef void (*handler_t)(uint8_t);</code>',
+    ],
+    understand: [
+      { title: 'Why array parameters lose their length', body: 'The array decays to a pointer to its first element, so the function only receives an address. Pass the length separately.' },
+      { title: 'Output parameters', body: 'Returning a status and writing the result through a pointer is the normal C way to report both success and a value.' },
+      { title: 'When you need a pointer to a pointer', body: 'Whenever a function must change which object the caller\'s pointer refers to: allocating for the caller, or relinking a list head.' },
+      { title: 'Why function pointers matter in firmware', body: 'Vector tables, callbacks, state machines and driver operation tables all choose at run time which function to call.' },
+      { title: 'The classic pointer bugs', body: 'Uninitialised, NULL, dangling, out of bounds, wrong <code>sizeof</code>, and misaligned casts. Be able to spot each in a snippet.' },
+    ],
+  },
+
   /* ============================================== Data structures and strings */
   {
     id: 'data', title: 'Data structures and strings', summary: 'Lists, ring buffers, pools, safe string handling',
@@ -60,9 +85,13 @@ export const NOTES = [
 
   /* ================================================================= Memory */
   {
-    id: 'memory', title: 'Memory', summary: 'Sections, stack, heap, alignment, DMA',
-    topics: ['memory'], days: [2, 5],
+    id: 'memory', title: 'Memory and memory management', summary: 'Lifetimes, malloc and free, ownership, sections, DMA',
+    topics: ['dynamic_memory', 'memory'], days: [2, 5],
     remember: [
+      'Lifetimes: locals end with their block; globals and <code>static</code> locals last the whole program; heap blocks last until <code>free</code>.',
+      '<code>p = malloc(n * sizeof *p)</code> and check for NULL. <code>malloc</code> memory is uninitialised; <code>calloc</code> zeroes it and checks the multiplication.',
+      'Never <code>p = realloc(p, n)</code>: use a temporary, because failure returns NULL and keeps the old block.',
+      'Free exactly what <code>malloc</code> returned, once. <code>free(NULL)</code> is a no-op; set pointers to NULL after freeing.',
       '<code>.text</code> and <code>.rodata</code>: flash. <code>.data</code>: RAM, initial values copied from flash. <code>.bss</code>: RAM, zeroed. Locals: stack. <code>malloc</code>: heap.',
       'Before <code>main</code>: set the stack pointer, copy <code>.data</code>, zero <code>.bss</code>, set up clocks, call constructors.',
       'Pointer arithmetic counts elements: <code>uint32_t *</code> + 1 moves 4 bytes.',
@@ -72,6 +101,7 @@ export const NOTES = [
       'Leak: never freed. Double free: freed twice. Use-after-free: used after free. AddressSanitizer catches the last two instantly.',
     ],
     understand: [
+      { title: 'Ownership', body: 'Every allocation has one owner responsible for freeing it. Document it ("caller must free") or provide create/destroy pairs, and use a single cleanup path for error exits.' },
       { title: 'Why returning a pointer to a local is a bug', body: 'The stack frame is reused as soon as the function returns, so the pointer dangles. Let the caller pass the buffer.' },
       { title: 'Why firmware avoids malloc', body: 'Unbounded timing, fragmentation (enough memory in total but no single block large enough), and failures that must be handled everywhere.' },
       { title: 'Why the cache and DMA disagree', body: 'DMA reads and writes RAM directly, while the CPU may hold newer or older copies in its cache. Maintenance operations bring them back in line.' },

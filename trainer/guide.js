@@ -65,6 +65,188 @@ if (i &lt; u) { /* never taken: -1 becomes 4294967295 */ }</code></pre>
     ],
   },
 
+  /* ===================================================== Pointers and arrays */
+  pointers: {
+    intro: 'Pointers are the heart of C, and every embedded interview probes them. This guide builds up from the basics: what a pointer is, how arrays and pointers relate, and the patterns you will use every day: output parameters, pointers to pointers and function pointers. Draw boxes and arrows as you read.',
+    sections: [
+      {
+        title: 'What a pointer is',
+        body: `<p>A pointer is a variable that holds an <b>address</b>. <code>&amp;x</code> gives the address of <code>x</code>; <code>*p</code> (dereferencing) reads or writes the object at the address in <code>p</code>.</p>
+<pre><code>int x = 5;
+int *p = &amp;x;     /* p holds the address of x        */
+*p = 9;          /* writes 9 into x                  */
+printf("%d %d\\n", x, *p);   /* 9 9 */</code></pre>
+<pre><code>address   name   value
+0x2000    x      9
+0x2004    p      0x2000   (points at x)</code></pre>
+<p>The pointer's <b>type</b> says what lives at that address: how many bytes a dereference reads and how far <code>p + 1</code> moves. <code>NULL</code> means "points nowhere"; dereferencing it, or an uninitialised pointer, is undefined behaviour. Initialise every pointer, to a real object or to <code>NULL</code>.</p>`,
+      },
+      {
+        title: 'Passing pointers to functions',
+        body: `<p>C passes every argument <b>by value</b>: the function gets a copy. To let a function change the caller's variable, pass its address:</p>
+<pre><code>void swap(int *a, int *b)
+{
+    int t = *a;
+    *a = *b;
+    *b = t;
+}
+swap(&amp;x, &amp;y);</code></pre>
+<p>The same idea gives <b>output parameters</b>, the usual way to return a value <i>and</i> a status in C:</p>
+<pre><code>int parse_u32(const char *s, uint32_t *out);   /* returns 0 on success */</code></pre>
+<p>Mark pointers the function only reads as <code>const</code>, so both the reader and the compiler know the data will not change.</p>`,
+      },
+      {
+        title: 'Arrays and pointer arithmetic',
+        body: `<p>An array is a contiguous block of elements. In most expressions its name <b>decays</b> to a pointer to the first element (the exceptions are <code>sizeof</code>, <code>&amp;</code> and initialising a char array from a string literal).</p>
+<ul>
+<li><code>a[i]</code> is defined as <code>*(a + i)</code>.</li>
+<li><code>p + 1</code> moves by <code>sizeof(*p)</code> bytes, not by one byte.</li>
+<li>Subtracting two pointers into the same array gives the number of <i>elements</i> between them (a <code>ptrdiff_t</code>).</li>
+<li>A pointer one past the last element may be computed and compared, but not dereferenced. Anything further out is undefined.</li>
+</ul>
+<pre><code>uint32_t sum(const uint8_t *buf, size_t len)
+{
+    uint32_t total = 0;
+    for (const uint8_t *p = buf; p &lt; buf + len; p++)
+        total += *p;
+    return total;
+}</code></pre>
+<p>Because an array argument arrives as a pointer, a function never knows the array's length: always pass it.</p>`,
+      },
+      {
+        title: 'Strings, 2D arrays and arrays of pointers',
+        body: `<ul>
+<li><code>char a[] = "hi";</code> is a writable 3-byte array holding a copy of the string. <code>const char *b = "hi";</code> is a pointer to a read-only string literal. <code>sizeof a</code> is 3; <code>sizeof b</code> is the size of a pointer.</li>
+<li><code>int m[3][4];</code> stores three rows of four <code>int</code>s one after another, so <code>m[i][j]</code> is element <code>i * 4 + j</code> from the start. A function taking it needs the column count: <code>void f(int m[][4], size_t rows)</code>.</li>
+<li><code>const char *names[] = { "eth0", "eth1" };</code> is an array of pointers, each pointing at its own string. <code>argv</code> in <code>main</code> is the same shape.</li>
+</ul>`,
+      },
+      {
+        title: 'Pointers to pointers, and void *',
+        body: `<p>To let a function change the caller's <i>pointer</i> (not just the data it points at), pass the pointer's address:</p>
+<pre><code>int buf_create(uint8_t **out, size_t n)
+{
+    uint8_t *p = malloc(n);
+    if (!p) return -1;
+    *out = p;          /* the caller's pointer now holds the block */
+    return 0;
+}
+uint8_t *buf;
+if (buf_create(&amp;buf, 256) == 0) { /* use buf */ }</code></pre>
+<p>The same trick removes the head special case when editing linked lists. <code>void *</code> is a generic "address of something": <code>malloc</code>, <code>memcpy</code> and callback contexts use it. You cannot dereference it or do arithmetic on it in standard C; assign it to a pointer of the right type first.</p>`,
+      },
+      {
+        title: 'Function pointers',
+        body: `<p>A function pointer holds the address of a function, so code can choose what to call at run time. Embedded code uses them for callbacks, interrupt vector tables, state machines and driver operation tables (like Linux's <code>struct file_operations</code>).</p>
+<pre><code>typedef void (*handler_t)(uint8_t event);
+
+static void on_press(uint8_t e)   { /* ... */ }
+static void on_release(uint8_t e) { /* ... */ }
+
+static handler_t handlers[] = { on_press, on_release };
+handlers[event](event);            /* call through the table */</code></pre>
+<p>Without the typedef, an array of four such pointers is declared <code>void (*table[4])(uint8_t);</code>. The typedef is far easier to read.</p>`,
+      },
+      {
+        title: 'The pointer bugs interviewers ask about',
+        body: `<ul>
+<li><b>Uninitialised pointer</b>: holds garbage, so writing through it corrupts random memory.</li>
+<li><b>NULL dereference</b>: check pointers that can be NULL, such as the result of <code>malloc</code> or a lookup.</li>
+<li><b>Dangling pointer</b>: points at a local that went out of scope, or at freed memory.</li>
+<li><b>Out of bounds / off by one</b>: <code>&lt;=</code> instead of <code>&lt;</code> in a loop writes one element past the end.</li>
+<li><b>Wrong size</b>: <code>sizeof(ptr)</code> when you meant the size of the array or of the pointed-to object.</li>
+<li><b>Bad casts</b>: casting a <code>uint8_t *</code> buffer to <code>uint32_t *</code> can be misaligned and breaks strict aliasing; use <code>memcpy</code>.</li>
+</ul>`,
+      },
+    ],
+    tips: [
+      'Say "a[i] is *(a + i)" and "an array argument is just a pointer, so pass the length".',
+      'Draw the boxes and arrows when explaining pointers to pointers or list manipulation.',
+      'Mention const on read-only pointer parameters; it shows you think about interfaces.',
+    ],
+  },
+
+  /* ====================================================== Memory management */
+  dynamic_memory: {
+    intro: 'Where objects live, how long they live, and who is responsible for freeing them. Even where firmware bans <code>malloc</code> after start-up, interviews ask about it, and Linux platform code uses it everywhere. Learn the rules and the classic bugs.',
+    sections: [
+      {
+        title: 'Storage duration: how long an object lives',
+        body: `<ul>
+<li><b>Automatic</b>: ordinary locals and parameters, on the stack. They exist until their block ends, then the memory is reused.</li>
+<li><b>Static</b>: globals and <code>static</code> locals, in <code>.data</code> or <code>.bss</code>. They exist for the whole program.</li>
+<li><b>Allocated</b>: from <code>malloc</code>, <code>calloc</code> or <code>realloc</code>, on the heap. They exist until you call <code>free</code>.</li>
+</ul>
+<p><b>Scope</b> (where a name is visible) is different from <b>lifetime</b> (how long the object exists). A <code>static</code> local is only visible inside its function but lives forever, which is why returning a pointer to it is safe while returning a pointer to an ordinary local is not.</p>`,
+      },
+      {
+        title: 'Stack versus heap',
+        body: `<ul>
+<li><b>Stack</b>: allocation is automatic and almost free (moving the stack pointer), memory is released in reverse order when functions return, and size is limited: a few KB per task in firmware, typically 8 MB for a Linux main thread and less for other threads.</li>
+<li><b>Heap</b>: any size and any lifetime, but slower, can fail, can fragment, and you must free every block exactly once.</li>
+</ul>
+<p>Large buffers (tens of KB and up) do not belong on a small stack: make them static, or allocate them once.</p>`,
+      },
+      {
+        title: 'malloc, calloc, realloc and free',
+        body: `<pre><code>struct pkt *p = malloc(n * sizeof *p);
+if (p == NULL)
+    return -ENOMEM;</code></pre>
+<ul>
+<li>Write <code>sizeof *p</code> rather than <code>sizeof(struct pkt)</code>: it stays correct if the pointer's type changes. In C there is no need to cast the result of <code>malloc</code>.</li>
+<li><code>malloc</code> leaves the memory <b>uninitialised</b>; <code>calloc(n, size)</code> zeroes it, and checks that <code>n * size</code> does not overflow. With <code>malloc</code>, check <code>n &gt; SIZE_MAX / sizeof *p</code> yourself when <code>n</code> comes from outside.</li>
+<li><code>realloc</code> may move the block. On failure it returns NULL and the old block is still allocated, so never write <code>p = realloc(p, n)</code>:
+<pre><code>void *tmp = realloc(p, new_size);
+if (tmp == NULL) { /* p is still valid: handle the error */ }
+else p = tmp;</code></pre></li>
+<li>Pass <code>free</code> exactly the pointer you got back, once. <code>free(NULL)</code> does nothing, so setting pointers to NULL after freeing makes an accidental second free harmless.</li>
+</ul>`,
+      },
+      {
+        title: 'Ownership and cleanup',
+        body: `<p>For every allocation, decide who <b>owns</b> it, meaning who must free it, and write it down: "returns a string the caller must free", or a matching pair such as <code>buf_create</code> / <code>buf_destroy</code>.</p>
+<p>When a function acquires several resources, use a single cleanup path so every error exit frees what was taken. This is the standard style in the Linux kernel:</p>
+<pre><code>int load_config(const char *path)
+{
+    int rc = -1;
+    char *text = NULL;
+    struct cfg *cfg = NULL;
+
+    text = read_file(path);
+    if (!text) goto out;
+    cfg = malloc(sizeof *cfg);
+    if (!cfg) goto out;
+    /* ... parse ... */
+    rc = 0;
+out:
+    free(cfg);    /* free(NULL) is fine */
+    free(text);
+    return rc;
+}</code></pre>`,
+      },
+      {
+        title: 'Memory bugs and how to find them',
+        body: `<ul>
+<li><b>Leak</b>: a block is never freed, often on an early-return error path. Memory use grows until allocation fails.</li>
+<li><b>Double free</b>: freeing the same block twice corrupts the allocator.</li>
+<li><b>Use-after-free</b>: using a block after it was freed, possibly after it was reused for something else.</li>
+<li><b>Invalid free</b>: freeing a pointer <code>malloc</code> did not return, such as the address of a local or a pointer into the middle of a block.</li>
+<li><b>Overflow</b> past the end of a block, and <b>reading uninitialised memory</b> from <code>malloc</code>.</li>
+</ul>
+<p>Tools: AddressSanitizer (<code>-fsanitize=address</code>) catches overflows, use-after-free and double frees with stack traces of the allocation and the free; LeakSanitizer and valgrind report leaks; valgrind also reports uses of uninitialised values.</p>`,
+      },
+      {
+        title: 'What firmware does instead',
+        body: `<p>Small embedded systems usually avoid the general heap after start-up: allocation time is unbounded, the heap fragments, and there may be no good way to recover from failure. Common alternatives are static allocation, allocating everything once during initialisation, and fixed-block pools with O(1) allocate and free. See the Embedded memory topic and Day 5 of the plan for pools and ring buffers.</p>`,
+      },
+    ],
+    tips: [
+      'State the ownership rule for every pointer you return or store.',
+      'Show the realloc pattern with a temporary variable; interviewers look for it.',
+      'Name a tool for each bug: ASan for overflows and use-after-free, LeakSanitizer or valgrind for leaks.',
+    ],
+  },
+
   /* ============================================= Interrupts and concurrency */
   interrupts: {
     intro: 'Almost every firmware bug story involves an interrupt. Expect questions on what belongs in a handler, how to share data with it safely, and how priorities and latency work on Cortex-M.',
@@ -170,7 +352,7 @@ portYIELD_FROM_ISR(woken);</code></pre>`,
     ],
   },
 
-  /* ================================================================= Memory */
+  /* ======================================================== Embedded memory */
   memory: {
     intro: 'Firmware has no virtual memory and usually no spare RAM, so you are expected to know where every byte lives and what can go wrong with pointers, the stack, the heap and DMA.',
     sections: [

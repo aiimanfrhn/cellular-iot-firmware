@@ -8,9 +8,11 @@
 
 export const QUIZ_TOPICS = [
   { id: 'c_compiler', title: 'C and the compiler', summary: 'volatile, promotion, padding' },
+  { id: 'pointers', title: 'Pointers and arrays', summary: 'Addresses, arithmetic, function pointers' },
+  { id: 'dynamic_memory', title: 'Memory management', summary: 'malloc, free, ownership, leaks' },
   { id: 'interrupts', title: 'Interrupts and concurrency', summary: 'ISRs, races, critical sections' },
   { id: 'rtos', title: 'RTOS', summary: 'Mutexes, semaphores, scheduling' },
-  { id: 'memory', title: 'Memory', summary: 'Sections, stack, heap, DMA' },
+  { id: 'memory', title: 'Embedded memory', summary: 'Sections, start-up, alignment, DMA' },
   { id: 'buses', title: 'Hardware and buses', summary: 'GPIO, UART, I²C, SPI' },
   { id: 'reliability', title: 'Reliability and boot', summary: 'Watchdog, faults, flash' },
   { id: 'networking', title: 'Networking', summary: 'Byte order, headers, switching' },
@@ -133,6 +135,225 @@ export const QUIZ = [
     ],
     answer: 1,
     explain: 'Macros substitute text, not values. Parenthesise every parameter and the whole body: <code>#define SQUARE(x) ((x) * (x))</code>. Even then <code>SQUARE(i++)</code> evaluates <code>i++</code> twice, so a <code>static inline</code> function is usually the better choice.',
+  },
+
+  /* ===================================================== Pointers and arrays */
+  {
+    id: 'ptr_deref', topic: 'pointers',
+    prompt: 'What is the value of <code>x</code> afterwards?<pre><code>int x = 5;\nint *p = &amp;x;\n*p = 9;</code></pre>',
+    options: ['5', '9', 'The address of <code>x</code>', 'It is undefined behaviour.'],
+    answer: 1,
+    explain: '<code>p</code> holds the address of <code>x</code>, so writing through <code>*p</code> writes to <code>x</code> itself.',
+  },
+  {
+    id: 'ptr_swap', topic: 'pointers',
+    prompt: 'Which <code>swap</code> actually exchanges the caller\'s <code>x</code> and <code>y</code>?',
+    options: [
+      '<code>void swap(int a, int b) { int t = a; a = b; b = t; }</code> called as <code>swap(x, y)</code>',
+      '<code>void swap(int *a, int *b) { int *t = a; a = b; b = t; }</code> called as <code>swap(&amp;x, &amp;y)</code>',
+      '<code>void swap(int *a, int *b) { int t = *a; *a = *b; *b = t; }</code> called as <code>swap(&amp;x, &amp;y)</code>',
+      'None: C cannot change a caller\'s variables.',
+    ],
+    answer: 2,
+    explain: 'C passes copies. The first version swaps its own copies; the second swaps its local copies of the pointers. Only writing through the pointers (<code>*a</code>, <code>*b</code>) changes the caller\'s variables.',
+  },
+  {
+    id: 'ptr_index', topic: 'pointers',
+    prompt: 'For an array <code>a</code>, what is <code>a[3]</code> defined as?',
+    options: ['<code>*(a + 3)</code>', '<code>*a + 3</code>', '<code>&amp;a + 3</code>', '<code>a + 3</code>'],
+    answer: 0,
+    explain: 'Indexing is pointer arithmetic plus a dereference. <code>*a + 3</code> adds 3 to the first element, and <code>a + 3</code> is the address of element 3, not its value.',
+  },
+  {
+    id: 'ptr_arith_struct', topic: 'pointers',
+    prompt: '<code>struct pkt</code> is 24 bytes. If <code>struct pkt *p</code> holds <code>0x2000</code>, what address is <code>p + 2</code>?',
+    options: ['<code>0x2002</code>', '<code>0x2018</code>', '<code>0x2048</code>', '<code>0x2030</code>'],
+    answer: 3,
+    explain: 'Pointer arithmetic moves in whole objects: 2 × 24 = 48 bytes = 0x30. That is why walking an array of structs with <code>p++</code> just works.',
+  },
+  {
+    id: 'ptr_array_vs_literal', topic: 'pointers',
+    prompt: 'Given <code>char a[] = "hi";</code> and <code>const char *b = "hi";</code> on a 64-bit machine, which is true?',
+    options: [
+      '<code>a</code> and <code>b</code> are the same thing, and both <code>sizeof</code> values are 3.',
+      '<code>a</code> is a writable 3-byte copy of the string (<code>sizeof a</code> is 3); <code>b</code> points to a read-only literal (<code>sizeof b</code> is 8).',
+      'Both are pointers, so both <code>sizeof</code> values are 8.',
+      '<code>a[0] = \'H\'</code> is undefined behaviour, but <code>b[0] = \'H\'</code> is fine.',
+    ],
+    answer: 1,
+    explain: 'Initialising an array copies the characters (including the terminator) into the array. The pointer version only stores the address of the literal, which must not be modified.',
+  },
+  {
+    id: 'ptr_2d', topic: 'pointers',
+    prompt: 'With <code>int m[3][4];</code>, how many <code>int</code>s after <code>m[0][0]</code> is <code>m[1][2]</code> stored?',
+    options: ['3', '5', '6', '8'],
+    answer: 2,
+    explain: 'Rows are stored one after another, each 4 elements long: offset = 1 × 4 + 2 = 6. That row length is why a function taking <code>m</code> must be told the column count.',
+  },
+  {
+    id: 'ptr_to_ptr', topic: 'pointers',
+    prompt: 'Why does <code>int buf_create(uint8_t **out, size_t n)</code> take a pointer to a pointer?',
+    options: [
+      'So it can store the address of the new block in the caller\'s pointer variable.',
+      'Because <code>malloc</code> only accepts double pointers.',
+      'To allocate a two-dimensional buffer.',
+      'It is only a style choice; <code>uint8_t *out</code> would work the same way.',
+    ],
+    answer: 0,
+    explain: 'With <code>uint8_t *out</code>, assigning <code>out = malloc(n)</code> would change only the function\'s copy, and the caller would never see the block (a leak). Passing <code>&amp;buf</code> lets the function write <code>*out = p</code>.',
+  },
+  {
+    id: 'ptr_void', topic: 'pointers',
+    prompt: 'Why can\'t you dereference a <code>void *</code> directly?',
+    options: [
+      'Because it is always NULL.',
+      'Because it points to read-only memory.',
+      'Because only the compiler is allowed to use it.',
+      'Because <code>void</code> has no size or type, so the compiler does not know what to read. Convert it to a typed pointer first.',
+    ],
+    answer: 3,
+    explain: '<code>void *</code> is a generic address used by <code>malloc</code>, <code>memcpy</code> and callback contexts. Arithmetic on it is not allowed in standard C either (GCC allows it as an extension, treating the size as 1).',
+  },
+  {
+    id: 'ptr_func_table', topic: 'pointers',
+    prompt: 'Which declares <code>table</code> as an array of 4 pointers to functions that take a <code>uint8_t</code> and return nothing?',
+    options: [
+      '<code>void *table[4](uint8_t);</code>',
+      '<code>void (*table[4])(uint8_t);</code>',
+      '<code>void (*table)(uint8_t)[4];</code>',
+      '<code>void table[4](*uint8_t);</code>',
+    ],
+    answer: 1,
+    explain: 'Read from the name outwards: <code>table</code> is an array of 4, of pointers, to functions taking <code>uint8_t</code>, returning <code>void</code>. In real code use a typedef: <code>typedef void (*handler_t)(uint8_t); handler_t table[4];</code>',
+  },
+  {
+    id: 'ptr_one_past', topic: 'pointers',
+    prompt: 'For <code>int a[10];</code>, what may you do with <code>int *end = a + 10;</code>?',
+    options: [
+      'Nothing; computing it is undefined behaviour.',
+      'Dereference it to read the element after the array.',
+      'Compute it and compare against it (for example <code>p &lt; end</code>), but not dereference it.',
+      'Use it exactly like <code>a + 9</code>.',
+    ],
+    answer: 2,
+    explain: 'C allows a pointer one past the end of an array so loops can use it as a stop marker. Reading or writing through it, or going further out, is undefined.',
+  },
+
+  /* ====================================================== Memory management */
+  {
+    id: 'dm_lifetime', topic: 'dynamic_memory',
+    prompt: 'Which of these is it safe to return a pointer to from a function?',
+    options: [
+      'A local array declared in the function.',
+      'A <code>static</code> array declared in the function.',
+      'One of the function\'s parameters.',
+      'A local variable declared <code>register</code>.',
+    ],
+    answer: 1,
+    explain: 'A <code>static</code> local lives for the whole program, even though its name is only visible in the function. Locals and parameters are gone when the function returns. (A <code>malloc</code>ed block is also safe, until it is freed.)',
+  },
+  {
+    id: 'dm_sizeof_idiom', topic: 'dynamic_memory',
+    prompt: 'Why write <code>p = malloc(n * sizeof *p);</code> rather than <code>malloc(n * sizeof(struct pkt))</code>?',
+    options: [
+      'It stays correct if the type of <code>p</code> changes later, because the size always follows the pointer.',
+      'It dereferences <code>p</code>, so <code>p</code> must already point somewhere.',
+      'It allocates less memory.',
+      'It zeroes the memory.',
+    ],
+    answer: 0,
+    explain: '<code>sizeof</code> does not evaluate its operand, so <code>sizeof *p</code> is safe even while <code>p</code> is uninitialised. It just asks "how big is the thing <code>p</code> points to?"',
+  },
+  {
+    id: 'dm_realloc', topic: 'dynamic_memory',
+    prompt: 'What is wrong with <code>buf = realloc(buf, new_size);</code>?',
+    options: [
+      'Nothing; this is the recommended pattern.',
+      '<code>realloc</code> always frees <code>buf</code>, even on success.',
+      'It only works when <code>new_size</code> is larger.',
+      'If <code>realloc</code> fails it returns NULL but the old block is still allocated, so this overwrites the only pointer to it and leaks it.',
+    ],
+    answer: 3,
+    explain: 'Assign to a temporary, check it, and only then replace <code>buf</code>. Remember also that <code>realloc</code> may move the block, so other pointers into the old block become invalid.',
+  },
+  {
+    id: 'dm_calloc', topic: 'dynamic_memory',
+    prompt: 'How does <code>calloc(n, size)</code> differ from <code>malloc(n * size)</code>?',
+    options: [
+      '<code>calloc</code> allocates on the stack.',
+      '<code>calloc</code> memory does not need to be freed.',
+      '<code>calloc</code> zeroes the memory and fails cleanly if <code>n * size</code> would overflow; <code>malloc</code> leaves it uninitialised.',
+      'There is no difference.',
+    ],
+    answer: 2,
+    explain: 'With <code>malloc(n * size)</code>, a huge <code>n</code> from untrusted input can wrap the multiplication to a small number, giving a tiny buffer that is then overrun. <code>calloc</code> checks for that.',
+  },
+  {
+    id: 'dm_free_null', topic: 'dynamic_memory',
+    prompt: 'What does <code>free(NULL);</code> do?',
+    options: ['Nothing: it is defined to be a no-op.', 'It crashes the program.', 'It frees the most recently allocated block.', 'It is undefined behaviour.'],
+    answer: 0,
+    explain: 'That is what makes a single cleanup label work: you can free every pointer that might have been allocated, without checking each one first.',
+  },
+  {
+    id: 'dm_free_middle', topic: 'dynamic_memory',
+    prompt: 'What happens here?<pre><code>char *p = malloc(16);\np += 4;\nfree(p);</code></pre>',
+    options: [
+      'It frees the last 12 bytes.',
+      'It frees the whole block.',
+      'Undefined behaviour: <code>free</code> must be given exactly the pointer <code>malloc</code> returned.',
+      'It frees nothing, safely.',
+    ],
+    answer: 2,
+    explain: 'The allocator finds its bookkeeping from the address it handed out. Keep the original pointer and walk the buffer with a separate one.',
+  },
+  {
+    id: 'dm_leak_path', topic: 'dynamic_memory',
+    prompt: 'A function allocates two buffers and returns early with an error if the second <code>malloc</code> fails. Memory use slowly grows. Why?',
+    options: [
+      'The heap is fragmented.',
+      'The early return does not free the first buffer, so every failure leaks it. Use a single cleanup path that frees whatever was allocated.',
+      'The second <code>malloc</code> leaks memory when it fails.',
+      'The stack is too small.',
+    ],
+    answer: 1,
+    explain: 'Error paths are where most leaks hide. A <code>goto out;</code> cleanup section (free in reverse order, relying on <code>free(NULL)</code> being safe) keeps every exit correct.',
+  },
+  {
+    id: 'dm_ownership', topic: 'dynamic_memory',
+    prompt: '<code>char *config_name(void)</code> returns a string it allocated with <code>malloc</code>. Who frees it?',
+    options: [
+      'Nobody; strings are freed automatically.',
+      'The function frees it before returning.',
+      'The C library frees it at exit, so it does not matter.',
+      'The caller, and the function\'s documentation should say so.',
+    ],
+    answer: 3,
+    explain: 'Freeing it inside the function would return a dangling pointer. The ownership rule ("caller must free") belongs in the comment or in the function\'s name, or provide a matching release function.',
+  },
+  {
+    id: 'dm_double_free', topic: 'dynamic_memory',
+    prompt: 'Which habit makes an accidental second <code>free</code> of the same pointer harmless?',
+    options: [
+      'Setting the pointer to NULL right after freeing it.',
+      'Calling <code>free</code> twice on purpose.',
+      'Casting the pointer to <code>void *</code> before freeing.',
+      'Using <code>calloc</code> instead of <code>malloc</code>.',
+    ],
+    answer: 0,
+    explain: 'A double free corrupts the allocator and can be exploitable. After <code>free(p); p = NULL;</code> a second <code>free(p)</code> is a no-op. It does not help with other copies of the pointer, so clear ownership still matters.',
+  },
+  {
+    id: 'dm_stack_heap', topic: 'dynamic_memory',
+    prompt: 'A thread with a 64 KB stack declares <code>uint8_t frame[128 * 1024];</code> as a local. What happens?',
+    options: [
+      'The compiler moves it to the heap automatically.',
+      'Nothing: locals have no size limit.',
+      'It works but runs slowly.',
+      'It overflows the stack and corrupts whatever memory lies beyond it. Make it static, or allocate it on the heap.',
+    ],
+    answer: 3,
+    explain: 'Stacks are fixed and often small (a few KB per task in firmware). Big buffers belong in static storage, a pool, or the heap. On Linux, the main thread\'s stack is typically 8 MB, but other threads often get far less.',
   },
 
   /* ============================================= Interrupts and concurrency */
@@ -381,7 +602,7 @@ export const QUIZ = [
     explain: 'If the mutex were held, the ISR would have to wait for a task that cannot run until the ISR finishes: a deadlock. Protect data shared with an ISR by briefly masking that interrupt, or send it through an ISR-safe queue or notification instead.',
   },
 
-  /* ================================================================= Memory */
+  /* ======================================================== Embedded memory */
   {
     id: 'mem_sections', topic: 'memory',
     prompt: 'Where does <code>int counter = 5;</code> (a global) normally live, and where does <code>int buffer[256];</code> (a global with no initialiser) live?',
