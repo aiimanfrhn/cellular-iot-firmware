@@ -9,7 +9,7 @@ if (root) {
   panel.innerHTML = `
     <div class="cloud-heading"><div><span class="eyebrow">CLOUD BACKUP</span><h2>Your account</h2></div><span id="cloud-state">Loading…</span></div>
     <p class="cloud-copy">Sign in to sync passed exercises. Your C source stays here unless you explicitly submit it.</p>
-    <form id="cloud-email-form" class="cloud-form"><label for="cloud-email">Email</label><input id="cloud-email" type="email" autocomplete="email" required placeholder="you@example.com"><button type="submit">Send sign-in code</button></form>
+    <form id="cloud-email-form" class="cloud-form"><label for="cloud-email">Email</label><input id="cloud-email" type="email" autocomplete="email" required placeholder="you@example.com"><button type="submit">Email sign-in link</button></form>
     <div id="cloud-user-actions" class="cloud-actions hidden"><button id="cloud-submit" type="button">Submit checked code</button><button id="cloud-signout" class="cloud-signout" type="button">Sign out</button></div>
     <p id="cloud-message" class="cloud-message" aria-live="polite"></p>
     <ul id="cloud-progress" class="cloud-progress"></ul>`;
