@@ -16,6 +16,41 @@ if (root) {
   root.insertAdjacentElement('afterend', panel);
   const $ = (id) => document.getElementById(id);
   const message = (value, error = false) => { $('cloud-message').textContent = value; $('cloud-message').classList.toggle('error', error); };
+  let cloudRows = [];
+  function updateProgressUI() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('embedded-c-trainer-week1-v1') || '{}'); } catch (_) {}
+    const cloudPassed = new Set(cloudRows.filter((row) => row.passed).map((row) => row.exercise_id));
+    const ids = ['bit_ops', 'ring_buffer'];
+    const localPass = (id) => {
+      const result = saved.results?.[id];
+      return !!(result?.passed && result.version === 2 && saved.code?.[id] === result.code);
+    };
+    const passed = ids.filter((id) => cloudPassed.has(id) || localPass(id)).length;
+    const count = ids.length, left = count - passed;
+    $('progress-count').textContent = passed + ' / ' + count;
+    $('passed-count').textContent = String(passed);
+    $('progress-fill').style.width = (passed / count * 100) + '%';
+    $('progress-caption').textContent = left === 0 ? 'Week 1 complete. Nice work!' : 'Pass ' + left + ' more ' + (left === 1 ? 'check' : 'checks') + ' to complete this week.';
+    $('week-state').textContent = left === 0 ? 'COMPLETE' : 'IN PROGRESS';
+    $('week-state').closest('.week-item').classList.toggle('complete', left === 0);
+    document.querySelectorAll('.exercise-tab').forEach((tab) => {
+      const id = tab.dataset.exercise, passedHere = cloudPassed.has(id) || localPass(id);
+      const result = saved.results?.[id];
+      tab.classList.toggle('passed', passedHere);
+      const check = $('tab-check-' + id), label = $('tab-result-' + id);
+      if (check) check.textContent = passedHere ? '✓' : (id === 'bit_ops' ? '1' : '2');
+      if (label) {
+        label.textContent = passedHere ? 'Passed' : result ? (result.passed ? 'Draft changed' : 'Needs work') : 'Not checked';
+        label.classList.toggle('passed-text', passedHere);
+      }
+    });
+    const activity = [...Object.values(saved.results || {}).map((r) => r?.at), ...cloudRows.map((r) => r.checked_at), saved.lastEdit].filter(Boolean).sort();
+    const last = activity[activity.length - 1];
+    $('last-activity').textContent = last ? (new Date(last).toDateString() === new Date().toDateString()
+      ? 'Today, ' + new Date(last).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : new Date(last).toLocaleDateString([], { month: 'short', day: 'numeric' })) : 'Not started';
+  }
   if (!url || !key) {
     $('cloud-state').textContent = 'Not configured';
     $('cloud-email-form').classList.add('hidden');
@@ -28,6 +63,7 @@ if (root) {
       if (!user) return;
       const { data, error } = await db.from('embedded_c_trainer_progress').select('exercise_id,checked_at').eq('user_id', user.id);
       if (error) { message('Could not load saved progress: ' + error.message, true); return; }
+      cloudRows = data || [];
       $('cloud-progress').replaceChildren();
       for (const id of ['bit_ops', 'ring_buffer']) {
         const row = (data || []).find((item) => item.exercise_id === id);
@@ -35,6 +71,7 @@ if (root) {
         li.textContent = (id === 'bit_ops' ? 'Bit operations' : 'Ring buffer') + ': ' + (row ? 'Passed' : 'Not passed yet');
         $('cloud-progress').append(li);
       }
+      updateProgressUI();
     }
     async function syncCurrentPass() {
       if (!user) return;
@@ -60,9 +97,10 @@ if (root) {
       $('cloud-email-form').classList.toggle('hidden', !!user);
       $('cloud-user-actions').classList.toggle('hidden', !user);
       $('cloud-progress').replaceChildren();
+      cloudRows = [];
       lastSynced = '';
       if (user) { await refreshProgress(); await syncCurrentPass(); }
-      else message('Sign in to back up your progress across devices.');
+      else { updateProgressUI(); message('Sign in to back up your progress across devices.'); }
     }
     $('cloud-email-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -100,6 +138,6 @@ if (root) {
       setSession(data?.session || null);
     });
     db.auth.onAuthStateChange((_event, session) => { queueMicrotask(() => setSession(session)); });
-    setInterval(syncCurrentPass, 1200);
+    setInterval(async () => { await syncCurrentPass(); updateProgressUI(); }, 1200);
   }
 }
