@@ -28,3 +28,14 @@ The checks live in `checks.js`. Each exercise lists `[label, C expression]` pair
 ## Deploy to Vercel
 
 Import the GitHub repository into Vercel and set **Root Directory** to `trainer`. Leave the framework preset as Vite, use `pnpm build` as the build command, and `dist` as the output directory. The build copies the compiler's WebAssembly assets into the static site. Git-connected Vercel projects can create a preview deployment for each pull request and deploy production when the configured production branch changes.
+
+
+## Supabase cloud progress
+
+The trainer can back up Week 1 pass status and store code only after the learner chooses **Submit checked code**. Email OTP sign-in is provided by Supabase Auth. Each table uses row-level security so a signed-in learner can access only their own records. The browser uses a publishable key; never put a service-role key in the site.
+
+1. Apply `supabase-schema.sql` to the selected Supabase project's SQL Editor.
+2. In Vercel, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for Production, Preview, and Development, then redeploy.
+3. In Supabase Auth URL configuration, allow the deployed Vercel site URL for redirects. The email provider must be enabled.
+
+Copy `.env.example` to `.env.local` for local development. Cloud features remain unavailable without these variables; local exercises continue to work.
