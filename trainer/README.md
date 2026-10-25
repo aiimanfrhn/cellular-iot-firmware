@@ -1,6 +1,15 @@
 # Embedded C Trainer
 
-A browser based Week 1 practice site for the 12-week embedded programming plan. It has two exercises: bit operations and a byte ring buffer. Clang compiles and runs C11 checks inside a WebAssembly worker in the browser, so no Python server or native C toolchain is needed. Your source code is not sent to the website or a compiler service. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
+A browser-based practice site for embedded and firmware engineer interviews. It has 12 classic C coding problems in four topics:
+
+| Topic | Problems |
+|---|---|
+| Bits and registers | Bit operations, count bits and powers of two, register bit fields, reverse bits and swap bytes |
+| Memory and pointers | Align an address, memmove with overlap, fixed-block memory pool |
+| Data and protocols | Endian-safe byte access, ring buffer, CRC-16/CCITT, parse an unsigned integer |
+| State machines | Button debouncer |
+
+Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
 ## Run locally
 
@@ -15,15 +24,23 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 
 ## Workflow
 
-1. Select an exercise, edit the C code, and choose **Run checks**.
-2. Fix compiler errors or failing behavior checks. Passing both exercises updates the Week 1 progress display.
-3. Choose **Download .c**, copy the downloaded file into your repository, then commit and push it over SSH. The site does not store GitHub credentials or push code for you.
+1. Pick a problem from the sidebar (or the picker on a phone), edit the C code, and choose **Run checks** (Ctrl+Enter).
+2. Fix compiler errors, failing checks, or undefined-behaviour crashes. Solved problems are ticked and counted by difficulty.
+3. Read the follow-up questions and practise answering them out loud.
+4. Choose **Download .c** to keep your solution, for example in your portfolio repository.
 
-Drafts and the last passing state live in this browser's local storage. Clearing browser site data removes them. The C compiler and submitted program run inside a WebAssembly worker, isolated by the browser. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
+Drafts and results live in this browser's local storage. Clearing browser site data removes them. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
 
-The ring-buffer exercise uses `RingBuffer` and the `rb_init`, `rb_push`, and `rb_pop` signatures shown in the starter. Its checker verifies empty/full behavior, FIFO order, wraparound, repeated drain/refill, long runs across many wraps, re-initialisation, and zero capacity.
+## How checking works
 
-The checks live in `checks.js`. Each exercise lists `[label, C expression]` pairs; every check runs and the page shows a pass/fail checklist. If the program crashes (for example an out-of-bounds write), the checker re-runs each check on its own to report which ones crashed. After the checks, the learner's own `main` (if their code has one) is compiled and run on its own, and its output and exit code appear in the **Program output** panel; the checker renames it so it never clashes with the checker's `main`. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
+- Code is compiled as strict C11 with `-Wall -Wextra -Werror -pedantic` and clang's undefined-behaviour sanitizer in trap mode. Shifting by the full width, signed overflow, NULL or misaligned pointers, and out-of-bounds array indexes crash instead of silently "working".
+- Every check runs and the page shows a pass/fail checklist. If the program crashes, the checker re-runs each check on its own to report which ones crashed.
+- Some problems also have source rules, such as "does not call memcpy or memmove", which are checked on the code with comments removed.
+- After the checks, the learner's own `main` (if any) is compiled and run on its own, and its output and exit code appear in the **Program output** panel.
+
+## Adding a problem
+
+Problems live in `problems.js`. Each entry has the text shown on the page, a starter (which must compile), a C `prelude` with test helpers, `checks` as `[label, C expression]` pairs, and optional `forbid` rules. The sidebar, picker and progress card are generated from this list. The checker runner is `checks.js`. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
 
 ## Deploy to Vercel
 

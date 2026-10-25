@@ -33,7 +33,8 @@ body {
 
 /* Visible keyboard focus everywhere */
 a:focus-visible,
-button:focus-visible {
+button:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
   border-radius: 6px;
@@ -153,46 +154,58 @@ button:focus-visible {
 }
 .stat-row b { font-weight: 600; color: var(--ink); }
 
-.week-list { margin-top: 24px; }
-.week-item {
+.problem-list { margin-top: 22px; }
+.problem-list h3 {
+  font: 500 11px var(--mono);
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 18px 4px 6px;
+}
+.problem-item {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 12px 9px;
-  border-bottom: 1px solid #e6ecec;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.week-number {
+.problem-item:hover { background: #edf2f1; }
+.problem-item.active { background: white; border-color: #c9ddda; box-shadow: 0 2px 8px #163a3b0a; }
+.problem-mark {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #e8efef;
-  color: #556a73;
-  font: 12px var(--mono);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e2e9e9;
+  color: var(--muted);
+  font: 600 12px var(--mono);
   flex: 0 0 auto;
 }
-.week-item.current .week-number { background: #d9efeb; color: var(--teal); }
-.week-item > span:nth-child(2) { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.week-item b { font-size: 13px; }
-.week-item small { font-size: 11.5px; color: var(--muted); }
-.week-state,
-.lock-icon { font: 10.5px var(--mono); color: var(--amber); }
-.week-item.complete .week-state { color: var(--green); }
-.week-item.locked { opacity: .62; }
-.lock-icon { color: var(--faint); letter-spacing: .4px; }
-.more-weeks { font-size: 12px; color: var(--faint); padding: 13px 8px; }
-.issue-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 20px 2px;
-  color: var(--teal);
-  font-size: 13px;
-  text-decoration: none;
-  font-weight: 700;
+.problem-item.solved .problem-mark { background: #dff2e7; color: var(--green); }
+.problem-item.attempted .problem-mark { background: #fbf0dc; color: var(--amber); }
+.problem-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.problem-text b { font-size: 13px; font-weight: 600; }
+.problem-text small { font-size: 11.5px; color: var(--muted); }
+.problem-level,
+.difficulty {
+  font: 10.5px var(--mono);
+  letter-spacing: .4px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #e3f3ec;
+  color: #1f7650;
+  flex: 0 0 auto;
 }
-.issue-link:hover { text-decoration: underline; }
+[data-level="Medium"] { background: #fbf0dc; color: #8a5a10; }
+[data-level="Hard"] { background: #fbe6df; color: #a33a33; }
 
 /* -------------------------------------------------------------- workspace */
 .workspace { min-width: 0; }
@@ -214,45 +227,17 @@ button:focus-visible {
 }
 .local-label span { background: #39a779; margin-right: 6px; }
 
-/* ------------------------------------------------------------------- tabs */
-.exercise-tabs { display: flex; gap: 8px; margin-bottom: 13px; }
-.exercise-tab {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  text-align: left;
-  padding: 11px 13px;
-  background: #edf2f1;
-  border: 1px solid transparent;
+/* ------------------------------------------------- problem picker (mobile) */
+.problem-select { display: none; margin-bottom: 13px; }
+.problem-select select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
   border-radius: 9px;
-  color: #51666e;
-  cursor: pointer;
-  font: inherit;
-}
-.exercise-tab:hover { background: #e6eeed; }
-.exercise-tab.active {
   background: white;
-  border-color: #c9ddda;
-  box-shadow: 0 2px 8px #163a3b0a;
   color: var(--ink);
+  font: 600 14px var(--sans);
 }
-.tab-check {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  background: #e2e9e9;
-  border-radius: 50%;
-  font: 12px var(--mono);
-  flex: 0 0 auto;
-}
-.exercise-tab.passed .tab-check { background: #dff2e7; color: var(--green); }
-.exercise-tab > span:nth-child(2) { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.exercise-tab b { font-size: 13.5px; }
-.exercise-tab small { font-size: 12px; color: var(--muted); }
-.tab-result { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
-.exercise-tab.passed .tab-result { color: var(--green); }
 
 /* --------------------------------------------------------------- exercise */
 .exercise-panel {
@@ -262,16 +247,9 @@ button:focus-visible {
   padding: 24px 26px;
   box-shadow: 0 4px 18px #13313c08;
 }
-.exercise-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.exercise-title h3 { font: 700 20px var(--display); margin: 5px 0 0; }
-.difficulty {
-  font: 10.5px var(--mono);
-  letter-spacing: .6px;
-  padding: 6px 8px;
-  border-radius: 5px;
-  background: #f0f4f2;
-  color: #556a71;
-}
+.exercise-meta { display: flex; align-items: center; gap: 12px; }
+.exercise-meta .difficulty { padding: 5px 8px; }
+.target-time { font-size: 12.5px; color: var(--muted); }
 .exercise-description {
   color: #44595f;
   font-size: 14.5px;
@@ -374,6 +352,18 @@ button:focus-visible {
 }
 .run-button:hover { background: var(--teal-dark); }
 .run-button:disabled { opacity: .6; cursor: progress; }
+.run-actions { display: flex; align-items: center; gap: 10px; }
+.next-button {
+  padding: 10px 14px;
+  border: 1px solid #c9ddda;
+  border-radius: 7px;
+  background: white;
+  color: var(--teal);
+  font: 700 13px var(--sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.next-button:hover { background: var(--mint); }
 .run-button:disabled:hover { background: var(--teal); }
 .run-button span { font-size: 10px; margin-right: 6px; }
 
@@ -478,20 +468,36 @@ button:focus-visible {
 .program-panel.crash pre { color: #f0a59b; }
 .program-panel p { margin: 0; padding: 12px 14px; color: #9fb4ba; font-size: 12.5px; }
 
-.commit-tip {
-  display: flex;
-  gap: 9px;
-  align-items: center;
+.followups {
   margin-top: 15px;
-  padding: 12px 13px;
+  padding: 14px 16px;
   background: #eff7f5;
-  border-radius: 7px;
-  font-size: 12.5px;
-  line-height: 1.5;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.55;
   color: #48615f;
 }
-.commit-tip b { color: #2e5556; }
-.tip-icon { font-size: 16px; color: var(--teal); }
+.followups h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13.5px; color: #2e5556; }
+.followups ul { margin: 0; padding-left: 20px; }
+.followups li { padding: 2px 0; }
+.followups p { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.followups code {
+  background: #fff;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #176862;
+  font: 12px var(--mono);
+}
+.tip-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: white;
+  font: 700 12px var(--mono);
+}
 
 footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
 .hidden { display: none !important; }
@@ -502,7 +508,8 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .sidebar { padding: 0; }
   .sidebar h1 br { display: none; }
   .intro { max-width: 600px; }
-  .week-list { display: none; }
+  .problem-list { display: none; }
+  .problem-select { display: block; }
   .progress-card { max-width: 500px; }
   .workspace-head h2 { font-size: 20px; }
 }
@@ -512,14 +519,12 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .header-status { font-size: 11.5px; }
   .layout { padding: 21px 15px 38px; }
   .workspace-head { align-items: flex-start; gap: 8px; flex-direction: column; }
-  .exercise-tabs { gap: 5px; }
-  .exercise-tab { gap: 7px; padding: 9px 8px; }
-  .tab-result { display: none; }
   .exercise-panel { padding: 18px 14px; }
   .editor-head { align-items: flex-start; gap: 8px; flex-direction: column; }
   .editor-wrap { height: 340px; }
   :root { --code-size: 12.5px; }
   .run-row { align-items: stretch; gap: 10px; flex-direction: column-reverse; }
+  .run-actions { flex-direction: column-reverse; align-items: stretch; }
   .run-button { width: 100%; padding: 13px 17px; }
   .local-label { font-size: 11px; }
   .result-panel { flex-wrap: wrap; }

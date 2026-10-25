@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#087e78">
-  <meta name="description" content="Practice embedded C in your browser: bit operations and a ring buffer, compiled and checked locally with Clang in WebAssembly.">
-  <title>Embedded C Trainer</title>
+  <meta name="description" content="Practise the C coding questions asked in embedded and firmware engineer interviews: bits, registers, memory, protocols and state machines, checked by a real compiler in your browser.">
+  <title>Embedded C Interview Trainer</title>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
   <script type="module" src="/supabase-trainer.js"></script>
@@ -17,41 +17,33 @@
   </header>
   <main class="layout">
     <aside class="sidebar">
-      <div class="eyebrow">YOUR 12-WEEK TRACK</div>
-      <h1>Build firmware skills <br>one deliverable at a time.</h1>
-      <p class="intro">Use your modem and certification experience as a head start. Practice the C and MCU skills employers expect to see in working code.</p>
+      <div class="eyebrow">EMBEDDED &amp; FIRMWARE INTERVIEWS</div>
+      <h1>Practise the C questions <br>firmware interviews ask.</h1>
+      <p class="intro">Classic problems on bits, registers, memory, protocols and state machines. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
       <section class="progress-card" aria-live="polite">
-        <div class="progress-heading"><div><span class="eyebrow">WEEK 1</span><h2>C refresh</h2></div><strong id="progress-count">0 / 2</strong></div>
+        <div class="progress-heading"><div><span class="eyebrow">YOUR PROGRESS</span><h2>Problems solved</h2></div><strong id="progress-count">0 / 0</strong></div>
         <div class="progress-track"><span id="progress-fill"></span></div>
-        <p id="progress-caption">Pass both checks to complete this week.</p>
-        <div class="stat-row"><span>Exercises passed</span><b id="passed-count">0</b></div>
+        <p id="progress-caption">Solve a problem to get started.</p>
+        <div id="difficulty-stats"></div>
         <div class="stat-row"><span>Last activity</span><b id="last-activity">Not started</b></div>
       </section>
-      <div class="week-list"><div class="week-item current"><span class="week-number">01</span><span><b>Embedded C refresh</b><small>Bit operations · Ring buffer</small></span><span class="week-state" id="week-state">IN PROGRESS</span></div>
-        <div class="week-item locked"><span class="week-number">02</span><span><b>Memory and interfaces</b><small>Pointers · UART framing</small></span><span class="lock-icon">LOCKED</span></div>
-        <div class="week-item locked"><span class="week-number">03</span><span><b>MCU foundations</b><small>GPIO · Timers · Interrupts</small></span><span class="lock-icon">LOCKED</span></div>
-        <div class="more-weeks">Weeks 4–12: drivers, RTOS, modem control, testing and portfolio</div>
-      </div>
-      <a class="issue-link" href="https://github.com/aiimanfrhn/cellular-iot-firmware/issues/1" target="_blank" rel="noreferrer">Open Week 1 GitHub issue <span>↗</span></a>
+      <nav class="problem-list" id="problem-list" aria-label="Problems"></nav>
     </aside>
     <section class="workspace">
-      <div class="workspace-head"><div><div class="eyebrow">PRACTICE LAB · WEEK 01</div><h2>Make progress you can see.</h2></div><span class="local-label"><span></span> Runs on this computer</span></div>
-      <div class="exercise-tabs" id="exercise-tabs" role="tablist" aria-label="Week 1 exercises">
-        <button class="exercise-tab active" id="tab-bit_ops" data-exercise="bit_ops" role="tab" aria-selected="true" aria-controls="exercise-panel" type="button"><span class="tab-check" id="tab-check-bit_ops">1</span><span><b>Bit operations</b><small>Bit masks and shifts</small></span><span class="tab-result" id="tab-result-bit_ops">Not checked</span></button>
-        <button class="exercise-tab" id="tab-ring_buffer" data-exercise="ring_buffer" role="tab" aria-selected="false" aria-controls="exercise-panel" tabindex="-1" type="button"><span class="tab-check" id="tab-check-ring_buffer">2</span><span><b>Ring buffer</b><small>FIFO data structure</small></span><span class="tab-result" id="tab-result-ring_buffer">Not checked</span></button>
-      </div>
-      <article class="exercise-panel" id="exercise-panel" role="tabpanel">
-        <div class="exercise-title"><div><span class="eyebrow" id="exercise-kicker">EXERCISE 1 · C BASICS</span><h3 id="exercise-title">Bit operations</h3></div><span class="difficulty">FOUNDATION</span></div>
+      <div class="workspace-head"><div><div class="eyebrow" id="exercise-kicker">PROBLEM 1</div><h2 id="exercise-title">Bit operations</h2></div><span class="local-label"><span></span> Runs on this computer</span></div>
+      <label class="problem-select"><span class="visually-hidden">Choose a problem</span><select id="problem-select"></select></label>
+      <article class="exercise-panel" id="exercise-panel">
+        <div class="exercise-meta"><span class="difficulty" id="exercise-difficulty">EASY</span><span class="target-time" id="exercise-time"></span></div>
         <p class="exercise-description" id="exercise-description"></p>
         <div class="requirements" id="requirements"></div>
         <div class="editor-head"><label for="code-editor">Your C code <span>· saved automatically in this browser</span></label><div class="editor-actions"><button class="text-button" id="reset-button" type="button">Reset starter</button><button class="text-button" id="download-button" type="button">Download .c</button></div></div>
         <div class="editor-wrap"><div class="line-numbers" id="line-numbers" aria-hidden="true">1</div><textarea id="code-editor" aria-label="C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
-        <div class="run-row"><div class="run-hint" id="save-hint">Edits stay in this browser until you download them.</div><button id="run-button" class="run-button" type="button"><span>▶</span> Run checks</button></div>
+        <div class="run-row"><div class="run-hint" id="save-hint">Edits stay in this browser until you download them.</div><div class="run-actions"><button id="next-button" class="next-button" type="button" hidden>Next problem →</button><button id="run-button" class="run-button" type="button"><span>▶</span> Run checks</button></div></div>
         <section class="result-panel idle" id="result-panel" aria-live="polite"><div class="result-icon" id="result-icon">↳</div><div class="result-content"><b id="result-title">Ready when you are</b><p id="result-message">Run the checks to compile your code and see exactly what passes.</p><ul class="check-list" id="check-list" hidden></ul><pre id="result-output" hidden></pre></div><span id="result-compiler" class="compiler-label"></span></section>
         <section class="program-panel" id="program-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span id="program-meta"></span></div><pre id="program-output"></pre><p id="program-note" hidden></p></section>
-        <div class="commit-tip"><span class="tip-icon">↗</span><span><b>Keep your GitHub streak going.</b> Download the checked file, add it to your repository, then commit and push with SSH.</span></div>
+        <section class="followups"><h4><span class="tip-icon" aria-hidden="true">?</span> Interviewers often ask next</h4><ul id="followups"></ul><p>Practise answering these out loud. Explaining your trade-offs matters as much as passing the checks.</p></section>
       </article>
-      <footer>Each check compiles your code with strict C11 warnings and runs focused tests. Your code stays on this computer.</footer>
+      <footer>Each check compiles your code as strict C11 with warnings as errors and undefined-behaviour traps, then runs focused tests. Your code stays on this computer.</footer>
     </section>
   </main>
 </body>

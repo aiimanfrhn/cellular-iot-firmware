@@ -1,25 +1,13 @@
+import { PROBLEMS, TOPICS } from './problems.js';
+
 (() => {
-  /* ---------------------------------------------------------------------------
-   * Exercise data. Add new exercises here; tabs, progress and labels read from
-   * this object, so nothing else needs to change for a new Week 1 exercise.
-   * ------------------------------------------------------------------------- */
-  const EXERCISES = {
-    bit_ops: {
-      kicker: 'EXERCISE 1 · C BASICS', title: 'Bit operations', filename: 'bit_ops.c',
-      description: 'Bit masks show up everywhere in firmware: registers, protocol flags, and compact state. Implement these four helpers safely using unsigned values.',
-      requirements: '<ul><li>Implement <code>set_bit</code>, <code>clear_bit</code>, <code>toggle_bit</code>, and <code>test_bit</code>.</li><li>Assume <code>position</code> is within the width of <code>unsigned int</code>; do not use signed shifts.</li><li>Keep the demo <code>main</code> or remove it. The checker tests your functions directly, then runs your <code>main</code> and shows what it prints.</li></ul>',
-      starter: `#include <limits.h>\n#include <stdio.h>\n\n/* Return value with bit position set to 1. */\nunsigned int set_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: set the selected bit */\n    (void)position;\n    return value;\n}\n\n/* Return value with bit position cleared to 0. */\nunsigned int clear_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: clear the selected bit */\n    (void)position;\n    return value;\n}\n\n/* Return value with bit position inverted. */\nunsigned int toggle_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: toggle the selected bit */\n    (void)position;\n    return value;\n}\n\n/* Return nonzero when the selected bit is set, otherwise return 0. */\nint test_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: test the selected bit */\n    (void)value;\n    (void)position;\n    return 0;\n}\n\nint main(void)\n{\n    unsigned int value = 0u;\n    value = set_bit(value, 3u);\n    printf("bit 3 set: %s\\n", test_bit(value, 3u) ? "yes" : "no");\n    return 0;\n}\n`
-    },
-    ring_buffer: {
-      kicker: 'EXERCISE 2 · DATA STRUCTURES', title: 'Ring buffer', filename: 'ring_buffer.c',
-      description: 'Implement a fixed-size byte FIFO like the kind used between a UART interrupt and a parser. Use the supplied structure and function signatures.',
-      requirements: '<ul><li><code>rb_init</code> creates an empty buffer and stores the caller-provided storage.</li><li><code>rb_push</code> returns false if full; <code>rb_pop</code> returns false if empty.</li><li>Support wraparound, preserve FIFO order, and safely reject zero capacity.</li><li>Optionally add a <code>main</code> to try your buffer; its output appears under the checks.</li></ul>',
-      starter: `#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n/* The checker provides this API declaration. Implement all three functions. */\ntypedef struct RingBuffer {\n    uint8_t *data;\n    size_t capacity;\n    size_t head;\n    size_t tail;\n    size_t count;\n} RingBuffer;\n\nvoid rb_init(RingBuffer *rb, uint8_t *storage, size_t capacity)\n{\n    /* TODO: initialize an empty buffer; capacity may be zero */\n    (void)rb;\n    (void)storage;\n    (void)capacity;\n}\n\nbool rb_push(RingBuffer *rb, uint8_t value)\n{\n    /* TODO: append one byte; return false when full or capacity is zero */\n    (void)rb;\n    (void)value;\n    return false;\n}\n\nbool rb_pop(RingBuffer *rb, uint8_t *out)\n{\n    /* TODO: remove oldest byte; return false when empty */\n    (void)rb;\n    (void)out;\n    return false;\n}\n`
-    }
-  };
+  /* Problem data lives in problems.js; the sidebar list, the mobile picker
+     and the progress card are all generated from it. */
+  const EXERCISES = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
   const ORDER = Object.keys(EXERCISES);
   const KEY = 'embedded-c-trainer-week1-v1';   // unchanged, so existing drafts load
-  const CHECKER_VERSION = 2;                   // bump when checks get stricter; older passes must re-run
+  const CHECKER_VERSION = 3;                   // bump when checks get stricter; older passes must re-run
+  const DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
   const CHECK_TIMEOUT_MS = 30000;              // compile + run budget per check
   const INDENT = '    ';
 
@@ -33,7 +21,7 @@
   if (!saved.results) saved.results = {};
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {} }
 
-  let active = ORDER[0];
+  let active = EXERCISES[saved.active] ? saved.active : ORDER[0];
   const codeFor = (id) => saved.code[id] ?? EXERCISES[id].starter;
   const isCurrentPass = (id) => {
     const r = saved.results[id];
@@ -98,7 +86,7 @@
     checker = null;
     finishCheck({
       passed: false, phase: 'timeout',
-      message: `Your program did not finish within ${CHECK_TIMEOUT_MS / 1000} seconds. Look for a loop whose exit condition is never reached, for example a ring buffer index that never wraps. The compiler is restarting.`,
+      message: `Your program did not finish within ${CHECK_TIMEOUT_MS / 1000} seconds. Look for a loop whose exit condition is never reached. The compiler is restarting.`,
       output: ''
     });
     startChecker();
@@ -141,30 +129,89 @@
     $('line-numbers').textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
   }
 
+  function problemState(id) {
+    const r = saved.results[id];
+    if (pending && pending.exercise === id) return { cls: 'checking', mark: '…', text: 'Checking…' };
+    if (isCurrentPass(id)) return { cls: 'solved', mark: '✓', text: 'Solved' };
+    if (r && r.passed && r.version !== CHECKER_VERSION) return { cls: 'attempted', mark: '•', text: 'Re-run checks' };
+    if (r && r.passed) return { cls: 'attempted', mark: '•', text: 'Draft changed' };
+    if (r) return { cls: 'attempted', mark: '•', text: 'Needs work' };
+    if (saved.code[id] !== undefined && saved.code[id] !== EXERCISES[id].starter) return { cls: 'attempted', mark: '•', text: 'In progress' };
+    return { cls: 'new', mark: '', text: 'Not started' };
+  }
+
   function renderProgress() {
     const count = ORDER.length;
-    const passed = ORDER.filter(isCurrentPass).length;
-    const left = count - passed;
-    $('progress-count').textContent = `${passed} / ${count}`;
-    $('passed-count').textContent = passed;
-    $('progress-fill').style.width = `${(passed / count) * 100}%`;
-    $('progress-caption').textContent = left === 0 ? 'Week 1 complete. Nice work!' : `Pass ${left} more ${left === 1 ? 'check' : 'checks'} to complete this week.`;
-    const week = $('week-state');
-    week.textContent = left === 0 ? 'COMPLETE' : 'IN PROGRESS';
-    week.closest('.week-item').classList.toggle('complete', left === 0);
+    const solved = ORDER.filter(isCurrentPass);
+    const left = count - solved.length;
+    $('progress-count').textContent = `${solved.length} / ${count}`;
+    $('progress-fill').style.width = `${(solved.length / count) * 100}%`;
+    $('progress-caption').textContent = left === 0
+      ? 'Every problem solved. Now practise explaining each one out loud.'
+      : `${left} ${left === 1 ? 'problem' : 'problems'} left.`;
+    $('difficulty-stats').replaceChildren(...DIFFICULTIES.map((level) => {
+      const ids = ORDER.filter((id) => EXERCISES[id].difficulty === level);
+      const row = document.createElement('div');
+      row.className = 'stat-row';
+      const name = document.createElement('span'); name.textContent = level;
+      const value = document.createElement('b'); value.textContent = `${ids.filter(isCurrentPass).length} / ${ids.length}`;
+      row.append(name, value);
+      return row;
+    }));
     const dates = Object.values(saved.results).map((r) => r && r.at).filter(Boolean).sort();
     $('last-activity').textContent = dateLabel(dates[dates.length - 1] || saved.lastEdit);
-    ORDER.forEach((id, i) => {
-      const r = saved.results[id], ok = isCurrentPass(id);
-      $(`tab-check-${id}`).textContent = ok ? '✓' : String(i + 1);
-      const label = $(`tab-result-${id}`);
-      label.textContent = pending && pending.exercise === id ? 'Checking…'
-        : ok ? 'Passed'
-        : r && r.passed && r.version !== CHECKER_VERSION ? 'Re-run checks'
-        : r && r.passed ? 'Draft changed'
-        : r ? 'Needs work' : 'Not checked';
-      document.querySelector(`[data-exercise="${id}"]`).classList.toggle('passed', ok);
+    ORDER.forEach((id) => {
+      const state = problemState(id);
+      const item = document.querySelector(`.problem-item[data-exercise="${id}"]`);
+      item.className = `problem-item ${state.cls}${id === active ? ' active' : ''}`;
+      item.querySelector('.problem-mark').textContent = state.mark;
+      item.querySelector('.problem-state').textContent = state.text;
+      $(`option-${id}`).textContent = `${state.cls === 'solved' ? '✓ ' : ''}${EXERCISES[id].title} · ${EXERCISES[id].difficulty}`;
     });
+    $('next-button').hidden = !(isCurrentPass(active) && nextProblem());
+  }
+
+  /* The next unsolved problem after the active one, wrapping round. */
+  function nextProblem() {
+    const start = ORDER.indexOf(active);
+    for (let step = 1; step < ORDER.length; step++) {
+      const id = ORDER[(start + step) % ORDER.length];
+      if (!isCurrentPass(id)) return id;
+    }
+    return null;
+  }
+
+  function buildProblemList() {
+    const nav = $('problem-list'), select = $('problem-select');
+    TOPICS.forEach((topic) => {
+      const ids = ORDER.filter((id) => EXERCISES[id].topic === topic);
+      if (!ids.length) return;
+      const heading = document.createElement('h3');
+      heading.textContent = topic;
+      nav.append(heading);
+      const group = document.createElement('optgroup');
+      group.label = topic;
+      ids.forEach((id) => {
+        const p = EXERCISES[id];
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'problem-item';
+        button.dataset.exercise = id;
+        button.innerHTML = '<span class="problem-mark" aria-hidden="true"></span><span class="problem-text"><b></b><small></small></span><span class="problem-level"></span><span class="visually-hidden problem-state"></span>';
+        button.querySelector('b').textContent = p.title;
+        button.querySelector('small').textContent = p.summary;
+        button.querySelector('.problem-level').textContent = p.difficulty;
+        button.querySelector('.problem-level').dataset.level = p.difficulty;
+        button.addEventListener('click', () => selectExercise(id));
+        nav.append(button);
+        const option = document.createElement('option');
+        option.value = id;
+        option.id = `option-${id}`;
+        group.append(option);
+      });
+      select.append(group);
+    });
+    select.addEventListener('change', () => selectExercise(select.value));
   }
 
   const CHECK_MARKS = { pass: '✓', fail: '✗', crash: '!', skipped: '–' };
@@ -245,20 +292,25 @@
 
   function selectExercise(id) {
     active = id;
-    document.querySelectorAll('.exercise-tab').forEach((btn) => {
-      const selected = btn.dataset.exercise === active;
-      btn.classList.toggle('active', selected);
-      btn.setAttribute('aria-selected', String(selected));
-      btn.tabIndex = selected ? 0 : -1;
-    });
-    $('exercise-panel').setAttribute('aria-labelledby', `tab-${id}`);
+    saved.active = id;
+    persist();
     const meta = EXERCISES[id];
-    $('exercise-kicker').textContent = meta.kicker;
+    document.querySelectorAll('.problem-item').forEach((item) => {
+      if (item.dataset.exercise === id) item.setAttribute('aria-current', 'true');
+      else item.removeAttribute('aria-current');
+    });
+    $('problem-select').value = id;
+    $('exercise-kicker').textContent = `PROBLEM ${ORDER.indexOf(id) + 1} OF ${ORDER.length} · ${meta.topic.toUpperCase()}`;
     $('exercise-title').textContent = meta.title;
+    $('exercise-difficulty').textContent = meta.difficulty.toUpperCase();
+    $('exercise-difficulty').dataset.level = meta.difficulty;
+    $('exercise-time').textContent = `Aim for about ${meta.minutes} minutes`;
     $('exercise-description').textContent = meta.description;
     $('requirements').innerHTML = meta.requirements;
+    $('followups').innerHTML = meta.followups.map((q) => `<li>${q}</li>`).join('');
     editor.value = codeFor(id);
     updateLines();
+    editor.scrollTop = 0;
     if (pending && pending.exercise === id) showChecking();
     else if (lastResult[id] && lastResult[id].code === editor.value) showResult(lastResult[id]);
     else showIdle();
@@ -313,18 +365,9 @@
   editor.addEventListener('scroll', () => { $('line-numbers').scrollTop = editor.scrollTop; });
 
   /* ---------------------------------------------------------------- buttons */
-  const tabs = [...document.querySelectorAll('.exercise-tab')];
-  tabs.forEach((btn) => btn.addEventListener('click', () => selectExercise(btn.dataset.exercise)));
-  $('exercise-tabs').addEventListener('keydown', (event) => {
-    const moves = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-    let i = tabs.findIndex((btn) => btn.dataset.exercise === active);
-    if (event.key in moves) i = (i + moves[event.key] + tabs.length) % tabs.length;
-    else if (event.key === 'Home') i = 0;
-    else if (event.key === 'End') i = tabs.length - 1;
-    else return;
-    event.preventDefault();
-    selectExercise(tabs[i].dataset.exercise);
-    tabs[i].focus();
+  $('next-button').addEventListener('click', () => {
+    const next = nextProblem();
+    if (next) { selectExercise(next); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   });
 
   $('run-button').addEventListener('click', runCheck);
@@ -351,6 +394,7 @@
   });
 
   /* ------------------------------------------------------------------ start */
+  buildProblemList();
   startChecker();
   selectExercise(active);
 })();
