@@ -14,7 +14,7 @@ A browser-based practice site for embedded, firmware and network platform softwa
 
 A **14-day training plan** (the button under the introduction) orders the problems for network platform software roles, such as C developers on switches, routers and access points. It adds study questions on networking, Linux, concurrency, debugging and behavioural interviews, which you tick off as you go. The plan lives in `plan.js`.
 
-A **concept quiz** (the button under the plan) covers the spoken part of the interview: 42 multiple-choice questions with explanations, in seven topics (C and the compiler, interrupts and concurrency, RTOS, memory, hardware and buses, reliability and boot, networking), plus a shuffled mixed review. Keys 1–4 choose an answer and Enter checks it. After a topic you can retry just the questions you missed. Questions live in `quiz.js`.
+**Study guide and quiz** (the button under the plan) covers the spoken part of the interview in seven topics: C and the compiler, interrupts and concurrency, RTOS, memory, hardware and buses, reliability and boot, and networking. Each topic opens on a study guide to read first, with notes, code examples and points worth saying in an interview, then 10 multiple-choice questions with explanations (70 in all, plus a shuffled mixed review). Keys 1–4 choose an answer and Enter checks it. After a topic you can retry just the questions you missed or go back to the guide. Notes live in `guide.js` and questions in `quiz.js`; each guide should cover what its questions ask.
 
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
@@ -31,7 +31,7 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 
 ### One-file version for offline study
 
-`pnpm build:single` writes the whole trainer (problems, training plan, concept quiz and checker) into one file, `dist-single/embedded-c-trainer.html`. Open it straight from disk in Chrome, Edge or Firefox; no server is needed. The ~28 MB compiler runtime is too large to embed, so the file downloads it from jsDelivr the first time you run checks and the browser caches it. Supabase sync is not included; progress stays in that browser. Rebuild it after changing `problems.js`, `plan.js` or `quiz.js`.
+`pnpm build:single` writes the whole trainer (problems, training plan, study guide, quiz and checker) into one file, `dist-single/embedded-c-trainer.html`. Open it straight from disk in Chrome, Edge or Firefox; no server is needed. The ~28 MB compiler runtime is too large to embed, so the file downloads it from jsDelivr the first time you run checks and the browser caches it. Supabase sync is not included; progress stays in that browser. Rebuild it after changing `problems.js`, `plan.js`, `guide.js` or `quiz.js`.
 
 ## Workflow
 

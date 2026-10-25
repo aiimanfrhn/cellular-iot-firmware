@@ -1,6 +1,7 @@
 import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
 import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
 import { QUIZ, QUIZ_TOPICS } from './quiz.js';
+import { GUIDE } from './guide.js';
 
 (() => {
   /* Problem data lives in problems.js; the sidebar list, the mobile picker
@@ -271,13 +272,15 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
   }
 
   /* ------------------------------------------------------------ concept quiz
-   * One question at a time: pick an option, check it, read the explanation.
+   * Each topic has a study guide (guide.js) and its questions. The quiz shows
+   * one question at a time: pick an option, check it, read the explanation.
    * saved.quiz[id] = { correct (ever answered correctly), last, at }. */
   const QUESTIONS = Object.fromEntries(QUIZ.map((q) => [q.id, q]));
   const MIXED = { id: 'mixed', title: 'Mixed review', summary: 'All topics, shuffled' };
   const QUIZ_SETS = [MIXED, ...QUIZ_TOPICS];
   const quizCorrect = (id) => !!saved.quiz[id]?.correct;
   let quiz = null;   // { set, order, index, selected, checked, session }
+  let quizPart = saved.quizPart === 'quiz' ? 'quiz' : 'guide';   // which half of a topic is showing
 
   const idsFor = (setId) => (setId === MIXED.id ? QUIZ : QUIZ.filter((q) => q.topic === setId)).map((q) => q.id);
 
@@ -294,6 +297,32 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
     renderQuiz();
   }
 
+  /* Open a topic on its study guide until any of its questions has been
+     answered; after that, go straight to the questions. */
+  function openTopic(setId) {
+    const answered = idsFor(setId).some((id) => saved.quiz[id]);
+    setPart(GUIDE[setId] && !answered ? 'guide' : 'quiz', false);
+    startQuiz(setId);
+  }
+
+  function setPart(part, render = true) {
+    quizPart = part;
+    saved.quizPart = part;
+    persist();
+    if (render) renderQuiz();
+  }
+
+  function renderGuide(set) {
+    const guide = GUIDE[set.id];
+    $('guide-intro').innerHTML = guide.intro;
+    $('guide-sections').innerHTML = guide.sections.map((s) => `<section class="guide-section"><h3>${s.title}</h3>${s.body}</section>`).join('');
+    $('guide-tips').innerHTML = guide.tips.map((t) => `<li>${t}</li>`).join('');
+    const count = idsFor(set.id).length;
+    $('guide-hint').textContent = `${count} questions on this topic follow.`;
+    const finished = quiz.index >= quiz.order.length;
+    $('guide-start').textContent = finished ? 'Retake the quiz →' : quiz.index > 0 || quiz.checked ? 'Back to the quiz →' : 'Start the quiz →';
+  }
+
   function buildQuizTopics() {
     $('quiz-topics').replaceChildren(...QUIZ_SETS.map((set) => {
       const button = document.createElement('button');
@@ -303,7 +332,7 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
       button.title = set.summary;
       button.innerHTML = '<span></span><small></small>';
       button.querySelector('span').textContent = set.title;
-      button.addEventListener('click', () => { startQuiz(set.id); focusQuiz(); });
+      button.addEventListener('click', () => { openTopic(set.id); focusQuiz(); });
       return button;
     }));
   }
@@ -311,7 +340,7 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
   function renderQuizProgress() {
     const correct = QUIZ.filter((q) => quizCorrect(q.id)).length;
     $('quiz-progress').textContent = `${correct} / ${QUIZ.length}`;
-    $('quiz-button-meta').textContent = correct ? `${correct} of ${QUIZ.length} answered correctly` : `${QUIZ.length} interview questions in ${QUIZ_TOPICS.length} topics`;
+    $('quiz-button-meta').textContent = correct ? `${correct} of ${QUIZ.length} questions answered correctly` : `${QUIZ_TOPICS.length} topics · ${QUIZ.length} questions`;
     document.querySelectorAll('.quiz-topic').forEach((button) => {
       const ids = idsFor(button.dataset.quiz);
       const done = ids.filter(quizCorrect).length;
@@ -323,8 +352,19 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
 
   function renderQuiz() {
     const set = QUIZ_SETS.find((t) => t.id === quiz.set);
-    $('exercise-kicker').textContent = `CONCEPT QUIZ · ${QUIZ.length} QUESTIONS`;
+    const reading = quizPart === 'guide' && !!GUIDE[set.id];
+    $('exercise-kicker').textContent = reading ? 'STUDY GUIDE' : `CONCEPT QUIZ · ${QUIZ.length} QUESTIONS`;
     $('exercise-title').textContent = set.title;
+    $('quiz-parts').hidden = !GUIDE[set.id];
+    document.querySelectorAll('.quiz-part').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.part === (reading ? 'guide' : 'quiz'))));
+    $('quiz-guide').hidden = !reading;
+    if (reading) {
+      $('quiz-question').hidden = true;
+      $('quiz-summary').hidden = true;
+      renderQuizProgress();
+      renderGuide(set);
+      return;
+    }
     const finished = quiz.index >= quiz.order.length;
     $('quiz-question').hidden = finished;
     $('quiz-summary').hidden = !finished;
@@ -381,6 +421,7 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
     $('quiz-retry').textContent = `Retry the ${missed} you missed`;
     const i = QUIZ_SETS.findIndex((t) => t.id === quiz.set);
     $('quiz-next-topic').textContent = i + 1 < QUIZ_SETS.length ? `Next: ${QUIZ_SETS[i + 1].title} →` : 'Start again →';
+    $('quiz-review-guide').hidden = !(missed && GUIDE[quiz.set]);
   }
 
   /* Move focus into the quiz so Enter checks the answer instead of
@@ -424,14 +465,15 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
     $('plan-button').setAttribute('aria-pressed', String(plan));
     $('plan-button-label').textContent = plan ? 'Back to the problem' : 'Open the training plan';
     $('quiz-button').setAttribute('aria-pressed', String(inQuiz));
-    $('quiz-button-label').textContent = inQuiz ? 'Back to the problem' : 'Take the concept quiz';
+    $('quiz-button-label').textContent = inQuiz ? 'Back to the problem' : 'Study guide and quiz';
     if (plan) {
       $('exercise-kicker').textContent = `TRAINING PLAN · ${PLAN.length} DAYS`;
       $('exercise-title').textContent = PLAN_TITLE;
     }
     if (inQuiz) {
       if (quiz) renderQuiz();
-      else startQuiz(QUIZ_SETS.some((t) => t.id === saved.quizSet) ? saved.quizSet : QUIZ_TOPICS[0].id);
+      else if (!QUIZ_SETS.some((t) => t.id === saved.quizSet)) openTopic(QUIZ_TOPICS[0].id);
+      else startQuiz(saved.quizSet);
     }
   }
 
@@ -650,12 +692,22 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
   $('quiz-retry').addEventListener('click', () => startQuiz(quiz.set, quiz.order.filter((id) => !quiz.session[id])));
   $('quiz-next-topic').addEventListener('click', () => {
     const i = QUIZ_SETS.findIndex((t) => t.id === quiz.set);
-    startQuiz(QUIZ_SETS[(i + 1) % QUIZ_SETS.length].id);
+    openTopic(QUIZ_SETS[(i + 1) % QUIZ_SETS.length].id);
+    focusQuiz();
+  });
+  $('quiz-review-guide').addEventListener('click', () => { setPart('guide'); focusQuiz(); });
+  document.querySelectorAll('.quiz-part').forEach((b) => b.addEventListener('click', () => setPart(b.dataset.part)));
+  $('guide-start').addEventListener('click', () => {
+    setPart('quiz', false);
+    if (quiz.index >= quiz.order.length) startQuiz(quiz.set);   // finished: start afresh
+    else renderQuiz();
+    focusQuiz();
+    $('quiz-panel').scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
 
   /* In the quiz, keys 1-9 choose an option and Enter checks or moves on. */
   document.addEventListener('keydown', (event) => {
-    if (saved.view !== 'quiz' || !quiz || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (saved.view !== 'quiz' || !quiz || !$('quiz-guide').hidden || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest('input, textarea, select')) return;
     if (/^[1-9]$/.test(event.key) && quiz.index < quiz.order.length) {
       const i = Number(event.key) - 1;

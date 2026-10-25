@@ -86,6 +86,55 @@ export const QUIZ = [
     explain: 'Shifting a 1 into the sign bit of a signed <code>int</code> overflows, which is undefined behaviour in C. Using an unsigned constant (<code>1u</code>, or <code>UINT32_C(1)</code>) makes it well defined.',
   },
 
+  {
+    id: 'c_array_param', topic: 'c_compiler',
+    prompt: 'On a 32-bit target, what does this return?<pre><code>size_t len(int a[10]) {\n    return sizeof(a);\n}</code></pre>',
+    options: [
+      '40, the size of ten <code>int</code>s.',
+      '10, the number of elements.',
+      '4, because an array parameter is really a pointer, so this is <code>sizeof(int *)</code>.',
+      'It does not compile.',
+    ],
+    answer: 2,
+    explain: 'An array passed to a function decays to a pointer to its first element, and the <code>[10]</code> in the parameter is ignored. Pass the length as a separate argument. (<code>sizeof</code> on the array in the scope where it is declared does give 40.) GCC and Clang warn about this with <code>-Wsizeof-array-argument</code>.',
+  },
+  {
+    id: 'c_signed_unsigned_compare', topic: 'c_compiler',
+    prompt: 'What does this print on a typical 32-bit target?<pre><code>int i = -1;\nunsigned int u = 1;\nputs(i &lt; u ? "less" : "not less");</code></pre>',
+    options: [
+      '<code>not less</code>, because <code>i</code> is converted to <code>unsigned int</code> and becomes 4294967295.',
+      '<code>less</code>, because -1 is smaller than 1.',
+      'It is undefined behaviour.',
+      'It depends on the optimisation level.',
+    ],
+    answer: 0,
+    explain: 'When a signed and an unsigned operand of the same rank meet, the usual arithmetic conversions turn the signed one into unsigned. -1 becomes <code>UINT_MAX</code>. The behaviour is well defined, just surprising; <code>-Wsign-compare</code> warns about it.',
+  },
+  {
+    id: 'c_static_local', topic: 'c_compiler',
+    prompt: 'What is special about <code>static int calls = 0;</code> declared inside a function?',
+    options: [
+      'It is reset to 0 on every call, but is faster than a normal local.',
+      'It can only be read by functions in the same file.',
+      'It lives on the stack but cannot be modified.',
+      'It is initialised once, keeps its value between calls, and lives in <code>.bss</code>/<code>.data</code> rather than on the stack.',
+    ],
+    answer: 3,
+    explain: 'A static local has static storage duration: one copy for the whole program, set up before <code>main</code>. That also means the function is no longer reentrant if it modifies it. (<code>static</code> on a file-scope variable or function means something different: internal linkage, visible only in that file.)',
+  },
+  {
+    id: 'c_macro_parens', topic: 'c_compiler',
+    prompt: 'With <code>#define SQUARE(x) x * x</code>, what is <code>SQUARE(a + 1)</code> when <code>a</code> is 3?',
+    options: [
+      '16',
+      '7, because it expands to <code>a + 1 * a + 1</code>.',
+      '10',
+      'It does not compile.',
+    ],
+    answer: 1,
+    explain: 'Macros substitute text, not values. Parenthesise every parameter and the whole body: <code>#define SQUARE(x) ((x) * (x))</code>. Even then <code>SQUARE(i++)</code> evaluates <code>i++</code> twice, so a <code>static inline</code> function is usually the better choice.',
+  },
+
   /* ============================================= Interrupts and concurrency */
   {
     id: 'isr_should_do', topic: 'interrupts',
@@ -158,6 +207,55 @@ export const QUIZ = [
     ],
     answer: 0,
     explain: 'Functions that keep state in static or global variables (classic <code>strtok</code>, many <code>printf</code> implementations) are not reentrant. Pass state in through parameters, or protect it.',
+  },
+
+  {
+    id: 'isr_latency', topic: 'interrupts',
+    prompt: 'What is interrupt latency, and what commonly makes it worse?',
+    options: [
+      'The time an ISR takes to run; long ISRs make it worse.',
+      'The time between an interrupt being requested and the first instruction of its handler running. Long critical sections with interrupts disabled and long higher-priority ISRs make it worse.',
+      'The time between two interrupts; a faster clock makes it worse.',
+      'The delay before the main loop notices a flag; using <code>volatile</code> makes it worse.',
+    ],
+    answer: 1,
+    explain: 'Hardware adds a fixed part (on Cortex-M, about 12 cycles to stack registers and fetch the vector). Software adds the rest: every place that masks interrupts, and every handler of equal or higher priority that is already running. That is why critical sections must be short.',
+  },
+  {
+    id: 'isr_nvic_priority', topic: 'interrupts',
+    prompt: 'On a Cortex-M NVIC, a priority-5 ISR is running when a priority-1 interrupt arrives. What happens?',
+    options: [
+      'The priority-1 interrupt waits, because the priority-5 handler started first.',
+      'The priority-1 interrupt is lost.',
+      'The priority-1 handler preempts the priority-5 handler, because a lower number means a higher priority. Priority 5 resumes afterwards.',
+      'Both handlers run in parallel.',
+    ],
+    answer: 2,
+    explain: 'On Cortex-M, 0 is the most urgent configurable priority. Interrupts nest: a strictly higher priority preempts a running handler, while equal or lower priorities stay pending until it returns. Note that RTOS "FromISR" calls are only allowed from interrupts at or below the RTOS\'s configured maximum syscall priority.',
+  },
+  {
+    id: 'isr_sleep_race', topic: 'interrupts',
+    prompt: 'The main loop runs <code>if (!data_ready) __WFI();</code>, and an ISR sets <code>data_ready</code>. Sometimes data is handled a whole tick late. Why?',
+    options: [
+      'If the interrupt fires after the check but before <code>__WFI()</code>, the CPU goes to sleep with work waiting and only wakes on the next interrupt. Disable interrupts, check, then <code>__WFI()</code>, then re-enable.',
+      '<code>__WFI()</code> ignores interrupts from peripherals.',
+      '<code>data_ready</code> needs to be an <code>int</code>, not a <code>bool</code>.',
+      'The ISR must call <code>__WFI()</code> itself.',
+    ],
+    answer: 0,
+    explain: 'This is the classic check-then-sleep race. On Cortex-M a pending interrupt still wakes <code>WFI</code> even while PRIMASK masks it, so: mask, check the flag, <code>WFI</code>, unmask (the ISR runs here), then handle the data. RTOS idle hooks use the same pattern.',
+  },
+  {
+    id: 'isr_edge_level', topic: 'interrupts',
+    prompt: 'What is the difference between edge-triggered and level-triggered interrupts?',
+    options: [
+      'Edge-triggered interrupts are faster; otherwise they are the same.',
+      'Level-triggered interrupts can only be used for GPIO pins.',
+      'Edge-triggered interrupts must be cleared twice.',
+      'Edge-triggered fires once on a transition (for example high to low). Level-triggered stays asserted for as long as the line is active, so the handler must remove the cause or it will run again.',
+    ],
+    answer: 3,
+    explain: 'Edge triggering suits events such as a button press, but a second edge that arrives while the first is pending can be merged and missed. Level triggering suits shared, open-drain interrupt lines from several devices: the line stays active until every source has been serviced.',
   },
 
   /* =================================================================== RTOS */
@@ -234,6 +332,55 @@ export const QUIZ = [
     explain: 'A queue gives you a thread-safe buffer plus blocking and wake-up. With a global you must add your own locking and some way to signal "new data".',
   },
 
+  {
+    id: 'rtos_preemption', topic: 'rtos',
+    prompt: 'In a preemptive, priority-based RTOS, an ISR gives a semaphore that a higher-priority task is waiting on. A lower-priority task was running. What happens next?',
+    options: [
+      'The higher-priority task runs when the lower-priority task next blocks or yields.',
+      'The higher-priority task becomes ready and, once the ISR requests a context switch on exit, runs straight away, preempting the lower-priority task.',
+      'Both tasks share the CPU in time slices.',
+      'The higher-priority task runs at the next one-second tick.',
+    ],
+    answer: 1,
+    explain: 'The scheduler always runs the highest-priority ready task. In FreeRTOS the ISR passes <code>&amp;xHigherPriorityTaskWoken</code> to the "FromISR" call and ends with <code>portYIELD_FROM_ISR(xHigherPriorityTaskWoken)</code>, so the switch happens on interrupt exit rather than at the next tick.',
+  },
+  {
+    id: 'rtos_delay_until', topic: 'rtos',
+    prompt: 'A task must sample a sensor exactly every 100 ms. It runs <code>read(); process(); vTaskDelay(100);</code> in a loop. What is the problem?',
+    options: [
+      'None; this is exactly every 100 ms.',
+      '<code>vTaskDelay</code> busy-waits, wasting CPU.',
+      'The period is 100 ms plus however long <code>read</code> and <code>process</code> took, so it drifts. Use <code>vTaskDelayUntil</code>, which wakes at fixed times.',
+      'The task will never be preempted.',
+    ],
+    answer: 2,
+    explain: '<code>vTaskDelay</code> is relative to when it is called. <code>vTaskDelayUntil(&amp;last, period)</code> is relative to the previous wake time, so the work time does not accumulate as drift. (Ticks, not milliseconds: use <code>pdMS_TO_TICKS(100)</code>.)',
+  },
+  {
+    id: 'rtos_busy_wait', topic: 'rtos',
+    prompt: 'A high-priority task waits for data with <code>while (!flag) { }</code>. What goes wrong?',
+    options: [
+      'Nothing, as long as <code>flag</code> is <code>volatile</code>.',
+      'The compiler removes the loop.',
+      'The task uses slightly more power, but nothing else changes.',
+      'It never blocks, so every lower-priority task is starved of CPU, possibly including the task that would set the flag. Block on a semaphore, queue or task notification instead.',
+    ],
+    answer: 3,
+    explain: 'A preemptive scheduler only runs a lower-priority task when every higher-priority task is blocked. Busy-waiting keeps the task ready forever. Blocking lets the scheduler run other tasks (or the idle task, which can sleep) until the event arrives.',
+  },
+  {
+    id: 'rtos_mutex_isr', topic: 'rtos',
+    prompt: 'Why must an ISR not take a mutex?',
+    options: [
+      'An ISR cannot block, and a mutex belongs to a task: priority inheritance and ownership have no meaning for an interrupt.',
+      'Mutexes are too slow, but they are otherwise safe in an ISR.',
+      'It is fine as long as the mutex is released before the ISR returns.',
+      'ISRs can take mutexes but not semaphores.',
+    ],
+    answer: 0,
+    explain: 'If the mutex were held, the ISR would have to wait for a task that cannot run until the ISR finishes: a deadlock. Protect data shared with an ISR by briefly masking that interrupt, or send it through an ISR-safe queue or notification instead.',
+  },
+
   /* ================================================================= Memory */
   {
     id: 'mem_sections', topic: 'memory',
@@ -308,6 +455,55 @@ export const QUIZ = [
     explain: 'Globals, static locals and const tables are not on the stack. Large local arrays and recursion are, and each recursive call adds another 512 bytes here.',
   },
 
+  {
+    id: 'mem_return_local', topic: 'memory',
+    prompt: 'What is wrong with this function?<pre><code>char *greeting(void) {\n    char buf[16] = "hello";\n    return buf;\n}</code></pre>',
+    options: [
+      'Nothing; the string is copied when the function returns.',
+      'It returns a pointer to a local array whose stack space is reused as soon as the function returns, so using it is undefined behaviour.',
+      '<code>buf</code> is too small.',
+      'Arrays cannot be returned from functions, so it does not compile.',
+    ],
+    answer: 1,
+    explain: 'The pointer dangles. It may seem to work in a quick test and then break when another call reuses that stack. Let the caller pass in a buffer and its size, return a pointer to a string literal or static storage, or return a struct by value.',
+  },
+  {
+    id: 'mem_memcpy_overlap', topic: 'memory',
+    prompt: 'You need to shift the bytes of a buffer two places to the right, within the same buffer. Which function is correct?',
+    options: [
+      '<code>memcpy(buf + 2, buf, n)</code>, because it is the fastest.',
+      '<code>strcpy(buf + 2, buf)</code>.',
+      '<code>memmove(buf + 2, buf, n)</code>, because the source and destination overlap.',
+      'Either <code>memcpy</code> or <code>memmove</code>; they behave the same.',
+    ],
+    answer: 2,
+    explain: '<code>memcpy</code> with overlapping regions is undefined behaviour; an optimised copy can read bytes it has already overwritten. <code>memmove</code> copies as if through a temporary buffer, typically by choosing the copy direction.',
+  },
+  {
+    id: 'mem_fragmentation', topic: 'memory',
+    prompt: 'After running for days, <code>malloc(512)</code> fails although the heap has 4 KB free in total. What is the likely cause?',
+    options: [
+      'A stack overflow.',
+      'The heap is full of memory leaks.',
+      '<code>malloc</code> cannot allocate more than 256 bytes on an MCU.',
+      'Fragmentation: the free memory is split into many small blocks between allocations still in use, and none is 512 bytes long.',
+    ],
+    answer: 3,
+    explain: 'Allocating and freeing blocks of mixed sizes leaves holes. Fixed-size block pools (one pool per size class), static allocation at start-up, or allocate-once designs avoid it, and their timing is deterministic too.',
+  },
+  {
+    id: 'mem_unaligned_m0', topic: 'memory',
+    prompt: 'On a Cortex-M0, code reads a <code>uint32_t</code> through a pointer to address <code>0x20000001</code>. What happens?',
+    options: [
+      'A HardFault, because the Cortex-M0 does not support unaligned word access.',
+      'The read works but takes a few extra cycles.',
+      'The CPU silently reads from <code>0x20000000</code> instead.',
+      'The compiler rejects the code.',
+    ],
+    answer: 0,
+    explain: 'Cortex-M0/M0+ (ARMv6-M) fault on any unaligned access. Cortex-M3/M4/M7 allow unaligned single loads and stores (slower), but not <code>LDRD</code>, <code>LDM</code> and friends. Unaligned pointer access is also undefined behaviour in C, so use <code>memcpy</code> or byte reads for data at arbitrary offsets.',
+  },
+
   /* ===================================================== Hardware and buses */
   {
     id: 'bus_i2c_vs_spi', topic: 'buses',
@@ -375,6 +571,55 @@ export const QUIZ = [
     ],
     answer: 3,
     explain: 'Reading the field byte by byte (<code>(p[0] &lt;&lt; 24) | …</code>) is correct on any CPU and avoids unaligned access too.',
+  },
+
+  {
+    id: 'bus_uart_garbage', topic: 'buses',
+    prompt: 'A UART terminal shows a stream of garbage characters and framing errors. What is the most likely cause?',
+    options: [
+      'A baud rate mismatch between the two ends (or a wrong peripheral clock setting, which gives the same effect).',
+      'The cable is longer than one metre.',
+      'Missing I²C pull-ups.',
+      'The receive buffer is too large.',
+    ],
+    answer: 0,
+    explain: 'Each side samples bits using its own clock. More than about 2–3% total timing error and the receiver samples the wrong bits, so stop bits land in the wrong place (framing errors). Check both baud rates, then check the clock tree the baud divisor is computed from, and that TX and RX are crossed over.',
+  },
+  {
+    id: 'bus_i2c_address', topic: 'buses',
+    prompt: 'A datasheet lists a sensor\'s I²C write address as <code>0x90</code>. Your driver API takes a 7-bit address. Which value do you pass?',
+    options: [
+      '<code>0x90</code>',
+      '<code>0x48</code>, because <code>0x90</code> is the 7-bit address shifted left with the R/W bit (0) added.',
+      '<code>0x91</code>',
+      '<code>0x120</code>',
+    ],
+    answer: 1,
+    explain: 'The first byte on the wire is the 7-bit address followed by the R/W bit. Some datasheets quote that whole byte (<code>0x90</code> to write, <code>0x91</code> to read). Mixing the two conventions is the most common reason a device does not ACK.',
+  },
+  {
+    id: 'bus_spi_multi', topic: 'buses',
+    prompt: 'Three SPI devices share one bus. What is required?',
+    options: [
+      'Each device needs its own address, as on I²C.',
+      'Each device needs its own SCK line.',
+      'SCK, MOSI and MISO can be shared, but each device needs its own chip-select line, and devices must release MISO (high impedance) when not selected.',
+      'SPI only supports one device per bus.',
+    ],
+    answer: 2,
+    explain: 'SPI has no addressing; chip select chooses the device. A device that drives MISO while deselected corrupts the bus. Check the SPI mode and maximum clock of each device too, and reconfigure the peripheral between transfers if they differ.',
+  },
+  {
+    id: 'bus_adc_counts', topic: 'buses',
+    prompt: 'A 12-bit ADC with a 3.3 V reference reads 2048. Roughly what is the input voltage?',
+    options: [
+      '2.048 V',
+      '0.8 V',
+      '3.3 V',
+      'About 1.65 V: 2048 / 4096 × 3.3 V.',
+    ],
+    answer: 3,
+    explain: 'A 12-bit ADC has 4096 codes, so each count is about 0.8 mV here. Voltage = counts × Vref / 4096. In firmware, use integer maths in millivolts, for example <code>(counts * 3300u) / 4096u</code>, rather than floating point.',
   },
 
   /* =================================================== Reliability and boot */
@@ -451,6 +696,55 @@ export const QUIZ = [
     explain: 'Busy-waiting keeps the core running at full current. Sleeping until an interrupt can cut consumption by orders of magnitude; deeper stop modes also gate clocks and peripherals, at the cost of a longer wake-up time.',
   },
 
+  {
+    id: 'rel_crc_vs_signature', topic: 'reliability',
+    prompt: 'A bootloader checks a CRC-32 over the application image before jumping to it. What does that protect against?',
+    options: [
+      'Accidental corruption, such as an interrupted or bit-flipped download. It does not stop a deliberately modified image, which needs a cryptographic signature check.',
+      'Both corruption and attackers, because CRC-32 is hard to forge.',
+      'Only attackers, not corruption.',
+      'Nothing, because the image runs from flash.',
+    ],
+    answer: 0,
+    explain: 'Anyone can recompute a CRC after changing the image. Secure boot verifies a signature (for example ECDSA over a SHA-256 hash) with a public key stored in the bootloader, and the bootloader itself must be protected from being overwritten.',
+  },
+  {
+    id: 'rel_ab_update', topic: 'reliability',
+    prompt: 'Power fails halfway through a firmware update. Which design still boots?',
+    options: [
+      'Erasing the running image first, then writing the new one in its place.',
+      'Writing the new image to a second (inactive) slot, verifying it, then switching the boot flag; the old image stays intact until the new one is confirmed working.',
+      'Updating from RAM only, without writing flash.',
+      'Any design, because flash keeps its contents without power.',
+    ],
+    answer: 1,
+    explain: 'A/B (dual-slot) updates always keep one good image. Good designs also roll back automatically: the new image must confirm itself (for example after passing a self-test) or the bootloader returns to the old slot on the next reset.',
+  },
+  {
+    id: 'rel_flash_wear', topic: 'reliability',
+    prompt: 'Firmware saves an uptime counter to the same flash sector every second. What happens after a few days?',
+    options: [
+      'Nothing; flash has unlimited writes.',
+      'The counter overflows.',
+      'The sector wears out: flash endures only about 10,000–100,000 erase cycles. Write less often and spread writes over several sectors (wear levelling).',
+      'The CPU slows down because flash is busy.',
+    ],
+    answer: 2,
+    explain: '86,400 seconds a day exhausts a typical sector in hours to days. Keep the value in RAM and save it rarely or on power-fail warning, append records across a sector and only erase when full, or use EEPROM/FRAM where available.',
+  },
+  {
+    id: 'rel_assert_field', topic: 'reliability',
+    prompt: 'In shipped firmware, what is usually the best thing to do when an internal check (an assert) fails?',
+    options: [
+      'Ignore it and carry on.',
+      'Print a message and spin forever in a loop.',
+      'Disable the watchdog so the fault can be debugged in the field.',
+      'Record what failed and where (for example in RAM that survives reset, or flash), then reset into a known safe state.',
+    ],
+    answer: 3,
+    explain: 'Continuing with broken invariants can do real damage; hanging forever leaves the product dead. Log the file, line or program counter, reset, and report the stored reason after boot so field failures can be diagnosed.',
+  },
+
   /* ============================================================= Networking */
   {
     id: 'net_ethertype', topic: 'networking',
@@ -523,5 +817,54 @@ export const QUIZ = [
     ],
     answer: 3,
     explain: '<code>10.1.3.7</code> is not inside <code>10.1.2.0/24</code> (that covers 10.1.2.0–10.1.2.255), so the longest prefix that matches is the /16. Hardware does this with TCAM; software uses a trie such as a Patricia or multibit trie.',
+  },
+
+  {
+    id: 'net_arp', topic: 'networking',
+    prompt: 'A host wants to send an IPv4 packet to <code>192.168.1.20</code> on its own subnet. How does it find the destination MAC address?',
+    options: [
+      'It asks the DNS server.',
+      'It broadcasts an ARP request ("who has 192.168.1.20?"); the owner replies with its MAC, and the host caches the answer.',
+      'The MAC address is the IP address written in hex.',
+      'It sends the packet to the default gateway, which always forwards it.',
+    ],
+    answer: 1,
+    explain: 'ARP maps IPv4 addresses to MAC addresses on the local link. For a destination outside the subnet, the host instead ARPs for its default gateway and sends the frame there. (IPv6 uses Neighbor Discovery instead of ARP.)',
+  },
+  {
+    id: 'net_udp_payload', topic: 'networking',
+    prompt: 'On an Ethernet link with a 1500-byte MTU, what is the largest UDP payload that fits in one unfragmented IPv4 packet (no IP options)?',
+    options: [
+      '1500 bytes',
+      '1518 bytes',
+      '1472 bytes: 1500 − 20 (IPv4 header) − 8 (UDP header).',
+      '1460 bytes',
+    ],
+    answer: 2,
+    explain: 'The MTU is the largest IP packet, not counting the 14-byte Ethernet header and 4-byte FCS. 1460 is the matching figure for TCP (1500 − 20 − 20), the usual MSS. A VLAN tag adds 4 bytes to the frame, not to the MTU.',
+  },
+  {
+    id: 'net_tcp_stream', topic: 'networking',
+    prompt: 'A client sends two 100-byte messages over a TCP socket. What can a single <code>recv()</code> on the server return?',
+    options: [
+      'Exactly one 100-byte message, always.',
+      'Either message, but never part of one.',
+      'Only the first byte.',
+      'Any number of bytes: part of a message, or both messages joined together. TCP is a byte stream, so the application must add its own framing, such as a length prefix.',
+    ],
+    answer: 3,
+    explain: 'TCP preserves the order and contents of bytes, not message boundaries. Loop until you have a whole header, read the length, then loop until you have the whole message. UDP is the opposite: each <code>recv</code> returns exactly one datagram, but datagrams can be lost, duplicated or reordered.',
+  },
+  {
+    id: 'net_stp', topic: 'networking',
+    prompt: 'Why do switched Ethernet networks run the Spanning Tree Protocol?',
+    options: [
+      'To block redundant links so there are no loops. Ethernet frames have no TTL, so a loop makes broadcasts circulate forever (a broadcast storm) and corrupts MAC tables.',
+      'To encrypt traffic between switches.',
+      'To assign IP addresses to switches.',
+      'To balance traffic evenly across all links.',
+    ],
+    answer: 0,
+    explain: 'STP elects a root bridge and puts redundant ports into a blocking state, unblocking them if an active link fails. Rapid STP (802.1w) converges in seconds rather than the 30–50 seconds of classic STP.',
   },
 ];
