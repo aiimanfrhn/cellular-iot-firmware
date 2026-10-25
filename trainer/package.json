@@ -1,0 +1,19 @@
+{
+  "name": "embedded-c-trainer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {"node": ">=22.12.0"},
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "clang-wasm-copy-assets public/clang && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@live-codes/clang-wasm": "0.3.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}
