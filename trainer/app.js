@@ -1,4 +1,6 @@
 (() => {
+  const checker = new Worker(new URL('./compiler-worker.js', import.meta.url), {type:'module'});
+  let checkQueue = [];
   const starters = {
     bit_ops: `#include <limits.h>\n#include <stdio.h>\n\n/* Return value with bit position set to 1. */\nunsigned int set_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: set the selected bit */\n    return value;\n}\n\n/* Return value with bit position cleared to 0. */\nunsigned int clear_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: clear the selected bit */\n    return value;\n}\n\n/* Return value with bit position inverted. */\nunsigned int toggle_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: toggle the selected bit */\n    return value;\n}\n\n/* Return nonzero when the selected bit is set, otherwise return 0. */\nint test_bit(unsigned int value, unsigned int position)\n{\n    /* TODO: test the selected bit */\n    return 0;\n}\n\nint main(void)\n{\n    unsigned int value = 0u;\n    value = set_bit(value, 3u);\n    printf("bit 3 set: %s\\n", test_bit(value, 3u) ? "yes" : "no");\n    return 0;\n}\n`,
     ring_buffer: `#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n/* The checker provides this API declaration. Implement all three functions. */\ntypedef struct RingBuffer {\n    uint8_t *data;\n    size_t capacity;\n    size_t head;\n    size_t tail;\n    size_t count;\n} RingBuffer;\n\nvoid rb_init(RingBuffer *rb, uint8_t *storage, size_t capacity)\n{\n    /* TODO: initialize an empty buffer; capacity may be zero */\n    (void)rb;\n    (void)storage;\n    (void)capacity;\n}\n\nbool rb_push(RingBuffer *rb, uint8_t value)\n{\n    /* TODO: append one byte; return false when full or capacity is zero */\n    (void)rb;\n    (void)value;\n    return false;\n}\n\nbool rb_pop(RingBuffer *rb, uint8_t *out)\n{\n    /* TODO: remove oldest byte; return false when empty */\n    (void)rb;\n    (void)out;\n    return false;\n}\n`
@@ -98,19 +100,29 @@
     const blob = new Blob([editor.value], {type:'text/x-c'}), url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href=url; a.download=descriptions[active].filename; a.click(); URL.revokeObjectURL(url);
   });
-  $('run-button').addEventListener('click', async () => {
-    const button = $('run-button'), code = editor.value;
-    button.disabled=true; button.innerHTML='<span>…</span> Checking'; $('result-panel').className='result-panel idle'; $('result-title').textContent='Compiling and running tests…'; $('result-message').textContent='Your code is being checked by the local C compiler.'; $('result-output').hidden=true;
-    try {
-      const response = await fetch('/api/check', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exercise:active,code})});
-      const result = await response.json(); showResult(result, code);
-    } catch (_) { showResult({passed:false,phase:'setup',message:'Could not reach the local checker. Is trainer/server.py still running?',output:''},code); }
-    finally { button.disabled=false; button.innerHTML='<span>▶</span> Run checks'; }
+  checker.addEventListener('message', (event) => {
+    const data = event.data;
+    if (data.type === 'ready') {
+      const wrap=$('server-status').parentElement; wrap.classList.add('ready'); $('server-status').textContent='Browser compiler ready · no setup needed';
+      return;
+    }
+    if (data.type === 'loading') { $('server-status').textContent=data.message; return; }
+    if (data.type === 'result') {
+      const pending=checkQueue.shift(); if (!pending) return;
+      showResult(data.result, pending.code);
+      const button=$('run-button'); button.disabled=false; button.innerHTML='<span>▶</span> Run checks';
+    }
   });
-  fetch('/api/health').then(r=>r.json()).then(info=>{
-    const wrap=$('server-status').parentElement;
-    if(info.ready){wrap.classList.add('ready');$('server-status').textContent=`Local checker ready · ${info.compiler}`;}
-    else{wrap.classList.add('error');$('server-status').textContent='C compiler not found';}
-  }).catch(()=>{$('server-status').textContent='Local checker unavailable';$('server-status').parentElement.classList.add('error');});
+  checker.addEventListener('error', () => {
+    const wrap=$('server-status').parentElement; wrap.classList.add('error'); $('server-status').textContent='Could not load browser compiler';
+    const pending=checkQueue.shift(); if (pending) showResult({passed:false,phase:'setup',message:'The browser compiler could not load. Refresh the page and try again.',output:''},pending.code);
+    const button=$('run-button'); button.disabled=false; button.innerHTML='<span>▶</span> Run checks';
+  });
+  $('run-button').addEventListener('click', () => {
+    const button = $('run-button'), code = editor.value;
+    button.disabled=true; button.innerHTML='<span>…</span> Checking'; $('result-panel').className='result-panel idle'; $('result-title').textContent='Compiling and running tests…'; $('result-message').textContent='The compiler runs in your browser. Your source is not uploaded.'; $('result-output').hidden=true;
+    checkQueue.push({code}); checker.postMessage({type:'check',exercise:active,code});
+  });
+  $('server-status').textContent='Loading browser compiler · first load downloads about 28 MB';
   selectExercise('bit_ops');
 })();
