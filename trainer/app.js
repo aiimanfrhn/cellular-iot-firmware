@@ -1,4 +1,5 @@
 import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
+import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
 
 (() => {
   /* Problem data lives in problems.js; the sidebar list, the mobile picker
@@ -18,6 +19,7 @@ import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (_) { saved = {}; }
   if (!saved.code) saved.code = {};
   if (!saved.results) saved.results = {};
+  if (!saved.plan) saved.plan = {};   // study items ticked off in the training plan
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {} }
 
   let active = EXERCISES[saved.active] ? saved.active : ORDER[0];
@@ -173,6 +175,111 @@ import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
       $(`option-${id}`).textContent = `${state.cls === 'solved' ? '✓ ' : ''}${EXERCISES[id].title} · ${EXERCISES[id].difficulty}`;
     });
     $('next-button').hidden = !(isSolved(active) && nextProblem());
+    renderPlan();
+  }
+
+  /* ---------------------------------------------------------- training plan
+   * Problem tasks count as done when the problem is solved; study tasks are
+   * ticked off by hand and stored in saved.plan under their day and position. */
+  const studyKey = (day, index) => `d${day + 1}-${index}`;
+  const PLAN_TOTAL = PLAN.reduce((n, day) => n + day.problems.length + day.study.length, 0);
+
+  function dayDone(day, d) {
+    return day.problems.filter(isSolved).length + day.study.filter((_, i) => saved.plan[studyKey(d, i)]).length;
+  }
+
+  function buildPlan() {
+    $('plan-intro').textContent = PLAN_INTRO;
+    const firstOpen = PLAN.findIndex((day, d) => dayDone(day, d) < day.problems.length + day.study.length);
+    $('plan-days').replaceChildren(...PLAN.map((day, d) => {
+      const li = document.createElement('li');
+      const details = document.createElement('details');
+      details.className = 'plan-day';
+      details.open = d === firstOpen;
+      const summary = document.createElement('summary');
+      summary.innerHTML = '<span class="plan-day-num"></span><span class="plan-day-title"></span><span class="plan-day-count"></span>';
+      summary.querySelector('.plan-day-num').textContent = `Day ${d + 1}`;
+      summary.querySelector('.plan-day-title').textContent = day.title;
+      const goal = document.createElement('p');
+      goal.className = 'plan-goal';
+      goal.textContent = day.goal;
+      const tasks = document.createElement('ul');
+      tasks.className = 'plan-tasks';
+      day.problems.forEach((id) => {
+        const p = EXERCISES[id];
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'plan-problem';
+        button.dataset.exercise = id;
+        button.innerHTML = '<span class="problem-mark" aria-hidden="true"></span><span class="problem-text"><b></b><small></small></span><span class="problem-level"></span><span class="visually-hidden problem-state"></span>';
+        button.querySelector('b').textContent = p.title;
+        button.querySelector('small').textContent = `${p.topic} · about ${p.minutes} min`;
+        button.querySelector('.problem-level').textContent = p.difficulty;
+        button.querySelector('.problem-level').dataset.level = p.difficulty;
+        button.addEventListener('click', () => { selectExercise(id); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+        item.append(button);
+        tasks.append(item);
+      });
+      day.study.forEach((text, i) => {
+        const item = document.createElement('li');
+        const label = document.createElement('label');
+        label.className = 'plan-study';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.dataset.key = studyKey(d, i);
+        box.addEventListener('change', () => {
+          if (box.checked) saved.plan[box.dataset.key] = true;
+          else delete saved.plan[box.dataset.key];
+          persist();
+          renderPlan();
+        });
+        const span = document.createElement('span');
+        span.textContent = text;
+        label.append(box, span);
+        item.append(label);
+        tasks.append(item);
+      });
+      details.append(summary, goal, tasks);
+      li.append(details);
+      return li;
+    }));
+  }
+
+  function renderPlan() {
+    let done = 0;
+    PLAN.forEach((day, d) => {
+      const count = dayDone(day, d), total = day.problems.length + day.study.length;
+      done += count;
+      const card = $('plan-days').children[d].firstElementChild;
+      card.classList.toggle('complete', count === total);
+      card.querySelector('.plan-day-count').textContent = count === total ? '✓ Done' : `${count} / ${total}`;
+    });
+    document.querySelectorAll('.plan-problem').forEach((button) => {
+      const state = problemState(button.dataset.exercise);
+      button.className = `plan-problem ${state.cls}`;
+      button.querySelector('.problem-mark').textContent = state.mark;
+      button.querySelector('.problem-state').textContent = state.text;
+    });
+    document.querySelectorAll('.plan-study input').forEach((box) => { box.checked = !!saved.plan[box.dataset.key]; });
+    $('plan-count').textContent = `${done} / ${PLAN_TOTAL}`;
+    $('plan-fill').style.width = `${(done / PLAN_TOTAL) * 100}%`;
+    $('plan-button-meta').textContent = `${done} of ${PLAN_TOTAL} tasks done`;
+  }
+
+  /* The workspace shows either the open problem or the training plan. */
+  function showView(next) {
+    const plan = next === 'plan';
+    saved.view = next;
+    persist();
+    $('plan-panel').hidden = !plan;
+    $('exercise-panel').hidden = plan;
+    $('plan-button').setAttribute('aria-pressed', String(plan));
+    $('plan-button-label').textContent = plan ? 'Back to the problem' : 'Open the training plan';
+    if (plan) {
+      $('exercise-kicker').textContent = `TRAINING PLAN · ${PLAN.length} DAYS`;
+      $('exercise-title').textContent = PLAN_TITLE;
+    }
   }
 
   /* The next unsolved problem after the active one, wrapping round. */
@@ -297,7 +404,7 @@ import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
   function selectExercise(id) {
     active = id;
     saved.active = id;
-    persist();
+    showView('problem');
     const meta = EXERCISES[id];
     document.querySelectorAll('.problem-item').forEach((item) => {
       if (item.dataset.exercise === id) item.setAttribute('aria-current', 'true');
@@ -376,6 +483,11 @@ import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
 
   $('run-button').addEventListener('click', runCheck);
 
+  $('plan-button').addEventListener('click', () => {
+    if (saved.view === 'plan') selectExercise(active);
+    else showView('plan');
+  });
+
   $('reset-button').addEventListener('click', () => {
     const starter = EXERCISES[active].starter;
     if (editor.value !== starter && !confirm('Replace your draft with the starter code? Your current code for this exercise will be lost. Download it first if you want to keep it.')) return;
@@ -403,7 +515,10 @@ import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
     renderProgress();
   });
 
+  const startView = saved.view;
   buildProblemList();
+  buildPlan();
   startChecker();
   selectExercise(active);
+  if (startView === 'plan') showView('plan');
 })();

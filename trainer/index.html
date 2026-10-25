@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#087e78">
-  <meta name="description" content="Practise the C coding questions asked in embedded and firmware engineer interviews: bits, registers, memory, protocols and state machines, checked by a real compiler in your browser.">
+  <meta name="description" content="Practise the C coding questions asked in embedded, firmware and network platform software interviews: bits, memory, lists, strings, packet parsing, switching and hardware, checked by a real compiler in your browser.">
   <title>Embedded C Interview Trainer</title>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
@@ -17,9 +17,10 @@
   </header>
   <main class="layout">
     <aside class="sidebar">
-      <div class="eyebrow">EMBEDDED &amp; FIRMWARE INTERVIEWS</div>
-      <h1>Practise the C questions <br>firmware interviews ask.</h1>
-      <p class="intro">Classic problems on bits, registers, memory, protocols and state machines. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
+      <div class="eyebrow">FIRMWARE &amp; NETWORK PLATFORM INTERVIEWS</div>
+      <h1>Practise the C questions <br>platform interviews ask.</h1>
+      <p class="intro">Classic problems on bits, memory, lists and strings, plus packet parsing, switching and hardware for network platform roles. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
+      <button class="plan-button" id="plan-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">14</span><span class="plan-button-text"><b id="plan-button-label">Open the training plan</b><small id="plan-button-meta">14 days of problems and study</small></span></button>
       <section class="progress-card" aria-live="polite">
         <div class="progress-heading"><div><span class="eyebrow">YOUR PROGRESS</span><h2>Problems solved</h2></div><strong id="progress-count">0 / 0</strong></div>
         <div class="progress-track"><span id="progress-fill"></span></div>
@@ -42,6 +43,11 @@
         <section class="result-panel idle" id="result-panel" aria-live="polite"><div class="result-icon" id="result-icon">↳</div><div class="result-content"><b id="result-title">Ready when you are</b><p id="result-message">Run the checks to compile your code and see exactly what passes.</p><ul class="check-list" id="check-list" hidden></ul><pre id="result-output" hidden></pre></div><span id="result-compiler" class="compiler-label"></span></section>
         <section class="program-panel" id="program-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span id="program-meta"></span></div><pre id="program-output"></pre><p id="program-note" hidden></p></section>
         <section class="followups"><h4><span class="tip-icon" aria-hidden="true">?</span> Interviewers often ask next</h4><ul id="followups"></ul><p>Practise answering these out loud. Explaining your trade-offs matters as much as passing the checks.</p></section>
+      </article>
+      <article class="plan-panel" id="plan-panel" hidden>
+        <div class="plan-head"><p class="plan-intro" id="plan-intro"></p><div class="plan-total"><strong id="plan-count">0 / 0</strong><span>tasks done</span></div></div>
+        <div class="progress-track"><span id="plan-fill"></span></div>
+        <ol class="plan-days" id="plan-days"></ol>
       </article>
       <footer>Each check compiles your code as strict C11 with warnings as errors and undefined-behaviour traps, then runs focused tests. Your code stays on this computer.</footer>
     </section>

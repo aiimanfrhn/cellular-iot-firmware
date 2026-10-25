@@ -1,13 +1,18 @@
 # Embedded C Trainer
 
-A browser-based practice site for embedded and firmware engineer interviews. It has 12 classic C coding problems in four topics:
+A browser-based practice site for embedded, firmware and network platform software interviews. It has 26 C coding problems in seven topics:
 
 | Topic | Problems |
 |---|---|
 | Bits and registers | Bit operations, count bits and powers of two, register bit fields, reverse bits and swap bytes |
 | Memory and pointers | Align an address, memmove with overlap, fixed-block memory pool |
+| Lists and strings | Reverse a linked list, find a loop and the middle, safe string copy, split a CLI command |
 | Data and protocols | Endian-safe byte access, ring buffer, CRC-16/CCITT, parse an unsigned integer |
-| State machines | Button debouncer |
+| Networking | Subnet masks and prefixes, parse an IPv4 address, MAC addresses, Internet checksum, Ethernet and VLAN header, validate an IPv4 header, MAC learning table |
+| Platform and hardware | Poll a register with a timeout, temperature sensor reading |
+| State machines | Button debouncer, fan control with hysteresis |
+
+A **14-day training plan** (the button under the introduction) orders the problems for network platform software roles, such as C developers on switches, routers and access points. It adds study questions on networking, Linux, concurrency, debugging and behavioural interviews, which you tick off as you go. The plan lives in `plan.js`.
 
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
@@ -29,7 +34,7 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 3. Read the follow-up questions and practise answering them out loud.
 4. Choose **Download .c** to keep your solution, for example in your portfolio repository.
 
-Drafts and results live in this browser's local storage. Clearing browser site data removes them. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
+Drafts, results and ticked plan items live in this browser's local storage. Clearing browser site data removes them. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
 
 ## How checking works
 
@@ -40,7 +45,7 @@ Drafts and results live in this browser's local storage. Clearing browser site d
 
 ## Adding a problem
 
-Problems live in `problems.js`. Each entry has the text shown on the page, a starter (which must compile), a C `prelude` with test helpers, `checks` as `[label, C expression]` pairs, and optional `forbid` rules. The sidebar, picker and progress card are generated from this list. The checker runner is `checks.js`. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
+Problems live in `problems.js`. Each entry has the text shown on the page, a starter (which must compile), a C `prelude` with test helpers, `checks` as `[label, C expression]` pairs, and optional `forbid` rules. The sidebar, picker and progress card are generated from this list. Add the new id to a day in `plan.js` so the training plan includes it. The checker runner is `checks.js`. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
 
 ## Deploy to Vercel
 

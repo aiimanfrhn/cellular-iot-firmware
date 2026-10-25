@@ -207,6 +207,117 @@ select:focus-visible {
 [data-level="Medium"] { background: #fbf0dc; color: #8a5a10; }
 [data-level="Hard"] { background: #fbe6df; color: #a33a33; }
 
+/* ---------------------------------------------------------- training plan */
+.plan-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #c9ddda;
+  border-radius: 12px;
+  background: var(--mint);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-button:hover { border-color: var(--teal); }
+.plan-button[aria-pressed="true"] { background: white; border-color: var(--teal); }
+.plan-button-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--teal);
+  color: white;
+  font: 600 13px var(--mono);
+}
+.plan-button-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.plan-button-text b { font-size: 13.5px; }
+.plan-button-text small { font-size: 12px; color: var(--muted); }
+
+.plan-panel {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px 26px;
+  box-shadow: 0 4px 18px #13313c08;
+}
+.plan-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.plan-intro { margin: 0; color: #44595f; font-size: 14.5px; line-height: 1.6; max-width: 70ch; }
+.plan-total { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+.plan-total strong { font: 500 16px var(--mono); color: var(--teal); }
+.plan-total span { font-size: 12px; color: var(--muted); }
+.plan-panel > .progress-track { margin: 16px 0 18px; }
+.plan-days { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.plan-day { border: 1px solid var(--line); border-radius: 10px; background: #fbfdfc; }
+.plan-day[open] { background: white; box-shadow: 0 2px 8px #163a3b0a; }
+.plan-day summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.plan-day summary::-webkit-details-marker { display: none; }
+.plan-day summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; border-radius: 10px; }
+.plan-day-num {
+  flex: 0 0 auto;
+  font: 500 11px var(--mono);
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--teal);
+  min-width: 48px;
+}
+.plan-day-title { flex: 1; min-width: 0; font: 700 14.5px var(--display); }
+.plan-day-count { flex: 0 0 auto; margin-left: auto; font: 11.5px var(--mono); color: var(--muted); }
+.plan-day.complete .plan-day-count { color: var(--green); }
+.plan-goal { margin: -2px 14px 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.plan-tasks { list-style: none; margin: 0; padding: 0 8px 10px; display: grid; gap: 2px; }
+.plan-problem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-problem:hover { background: #edf2f1; }
+.plan-problem.solved .problem-mark { background: #dff2e7; color: var(--green); }
+.plan-problem.attempted .problem-mark { background: #fbf0dc; color: var(--amber); }
+.plan-study {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #34494f;
+  cursor: pointer;
+}
+.plan-study:hover { background: #f3f7f6; }
+.plan-study input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 3px 0;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+.plan-study input:checked + span { color: var(--faint); text-decoration: line-through; }
+
 /* -------------------------------------------------------------- workspace */
 .workspace { min-width: 0; }
 .workspace-head {
@@ -519,7 +630,12 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .header-status { font-size: 11.5px; }
   .layout { padding: 21px 15px 38px; }
   .workspace-head { align-items: flex-start; gap: 8px; flex-direction: column; }
-  .exercise-panel { padding: 18px 14px; }
+  .exercise-panel,
+  .plan-panel { padding: 18px 14px; }
+  .plan-head { flex-direction: column; gap: 10px; }
+  .plan-total { flex-direction: row; align-items: baseline; gap: 6px; }
+  .plan-day summary { flex-wrap: wrap; gap: 4px 10px; }
+  .plan-day-title { flex-basis: 100%; order: 3; }
   .editor-head { align-items: flex-start; gap: 8px; flex-direction: column; }
   .editor-wrap { height: 340px; }
   :root { --code-size: 12.5px; }
