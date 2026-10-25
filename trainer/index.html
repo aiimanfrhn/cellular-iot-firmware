@@ -22,6 +22,7 @@
       <p class="intro">Classic problems on bits, memory, lists and strings, plus packet parsing, switching and hardware for network platform roles. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
       <button class="plan-button" id="plan-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">14</span><span class="plan-button-text"><b id="plan-button-label">Open the training plan</b><small id="plan-button-meta">14 days of problems and study</small></span></button>
       <button class="plan-button" id="quiz-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">?</span><span class="plan-button-text"><b id="quiz-button-label">Study guide and quiz</b><small id="quiz-button-meta">Read the notes, then test yourself</small></span></button>
+      <button class="plan-button" id="notes-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">≡</span><span class="plan-button-text"><b id="notes-button-label">Learning guide</b><small>What to remember and understand</small></span></button>
       <section class="progress-card" aria-live="polite">
         <div class="progress-heading"><div><span class="eyebrow">YOUR PROGRESS</span><h2>Problems solved</h2></div><strong id="progress-count">0 / 0</strong></div>
         <div class="progress-track"><span id="progress-fill"></span></div>
@@ -51,7 +52,14 @@
         <div class="progress-track"><span id="plan-fill"></span></div>
         <ol class="plan-days" id="plan-days"></ol>
       </article>
+      <article class="plan-panel notes-panel" id="notes-panel" data-show="all" hidden>
+        <p class="plan-intro" id="notes-intro"></p>
+        <div class="quiz-parts notes-filter" role="group" aria-label="Show"><button type="button" class="quiz-part notes-show" data-show="all" aria-pressed="true">Everything</button><button type="button" class="quiz-part notes-show" data-show="remember" aria-pressed="false">Remember</button><button type="button" class="quiz-part notes-show" data-show="understand" aria-pressed="false">Understand</button></div>
+        <nav class="notes-jump" id="notes-jump" aria-label="Jump to an area"></nav>
+        <div id="notes-areas"></div>
+      </article>
       <article class="plan-panel quiz-panel" id="quiz-panel" tabindex="-1" hidden>
+        <button type="button" class="text-button quiz-back" id="quiz-back" hidden>← Back to the training plan</button>
         <div class="quiz-topics" id="quiz-topics" role="group" aria-label="Quiz topic"></div>
         <div class="quiz-parts" id="quiz-parts" role="group" aria-label="Study guide or quiz"><button type="button" class="quiz-part" data-part="guide" aria-pressed="true">Study guide</button><button type="button" class="quiz-part" data-part="quiz" aria-pressed="false">Quiz</button></div>
         <div class="guide" id="quiz-guide" hidden>

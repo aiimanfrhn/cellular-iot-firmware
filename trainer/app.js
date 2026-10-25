@@ -2,6 +2,8 @@ import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
 import { PLAN, PLAN_INTRO, PLAN_TITLE } from './plan.js';
 import { QUIZ, QUIZ_TOPICS } from './quiz.js';
 import { GUIDE } from './guide.js';
+import { DAY_GUIDES } from './plan-guide.js';
+import { NOTES, NOTES_INTRO } from './notes.js';
 
 (() => {
   /* Problem data lives in problems.js; the sidebar list, the mobile picker
@@ -149,6 +151,28 @@ import { GUIDE } from './guide.js';
     return { cls: 'new', mark: '', text: 'Not started' };
   }
 
+  /* Problem lists and plan tasks share one button layout: status mark,
+     title and subtitle, a badge, and a status for screen readers. */
+  function taskButton(className, title, subtitle, badge, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.innerHTML = '<span class="problem-mark" aria-hidden="true"></span><span class="problem-text"><b></b><small></small></span><span class="problem-level"></span><span class="visually-hidden problem-state"></span>';
+    button.querySelector('b').textContent = title;
+    button.querySelector('small').textContent = subtitle;
+    const level = button.querySelector('.problem-level');
+    level.textContent = badge;
+    if (DIFFICULTIES.includes(badge)) level.dataset.level = badge;
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function setTaskState(button, className, { cls, mark, text }) {
+    button.className = `${className} ${cls}`;
+    button.querySelector('.problem-mark').textContent = mark;
+    button.querySelector('.problem-state').textContent = text;
+  }
+
   function renderProgress() {
     const count = ORDER.length;
     const solved = ORDER.filter(isSolved);
@@ -171,10 +195,7 @@ import { GUIDE } from './guide.js';
     $('last-activity').textContent = dateLabel(dates[dates.length - 1] || saved.lastEdit);
     ORDER.forEach((id) => {
       const state = problemState(id);
-      const item = document.querySelector(`.problem-item[data-exercise="${id}"]`);
-      item.className = `problem-item ${state.cls}${id === active ? ' active' : ''}`;
-      item.querySelector('.problem-mark').textContent = state.mark;
-      item.querySelector('.problem-state').textContent = state.text;
+      setTaskState(document.querySelector(`.problem-item[data-exercise="${id}"]`), `problem-item${id === active ? ' active' : ''}`, state);
       $(`option-${id}`).textContent = `${state.cls === 'solved' ? '✓ ' : ''}${EXERCISES[id].title} · ${EXERCISES[id].difficulty}`;
     });
     $('next-button').hidden = !(isSolved(active) && nextProblem());
@@ -183,18 +204,30 @@ import { GUIDE } from './guide.js';
   }
 
   /* ---------------------------------------------------------- training plan
-   * Problem tasks count as done when the problem is solved; study tasks are
-   * ticked off by hand and stored in saved.plan under their day and position. */
+   * Each day starts with its study guide and quiz (plan-guide.js), done when
+   * every question of that day has been answered correctly. Problem tasks
+   * count as done when the problem is solved; study tasks are ticked off by
+   * hand and stored in saved.plan under their day and position. */
   const studyKey = (day, index) => `d${day + 1}-${index}`;
-  const PLAN_TOTAL = PLAN.reduce((n, day) => n + day.problems.length + day.study.length, 0);
+  const daySetId = (d) => `day${d + 1}`;
+  const dayTotal = (day) => 1 + day.problems.length + day.study.length;
+  const PLAN_TOTAL = PLAN.reduce((n, day) => n + dayTotal(day), 0);
+  const dayQuizDone = (d) => idsFor(daySetId(d)).every(quizCorrect);
 
   function dayDone(day, d) {
-    return day.problems.filter(isSolved).length + day.study.filter((_, i) => saved.plan[studyKey(d, i)]).length;
+    return (dayQuizDone(d) ? 1 : 0) + day.problems.filter(isSolved).length + day.study.filter((_, i) => saved.plan[studyKey(d, i)]).length;
+  }
+
+  function openDay(d) {
+    openTopic(daySetId(d));
+    showView('day');
+    focusQuiz();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function buildPlan() {
     $('plan-intro').textContent = PLAN_INTRO;
-    const firstOpen = PLAN.findIndex((day, d) => dayDone(day, d) < day.problems.length + day.study.length);
+    const firstOpen = PLAN.findIndex((day, d) => dayDone(day, d) < dayTotal(day));
     $('plan-days').replaceChildren(...PLAN.map((day, d) => {
       const li = document.createElement('li');
       const details = document.createElement('details');
@@ -209,21 +242,13 @@ import { GUIDE } from './guide.js';
       goal.textContent = day.goal;
       const tasks = document.createElement('ul');
       tasks.className = 'plan-tasks';
+      const addTask = (button) => { const item = document.createElement('li'); item.append(button); tasks.append(item); return button; };
+      addTask(taskButton('plan-problem plan-guide', 'Study guide and quiz', `Read the notes, then ${idsFor(daySetId(d)).length} questions`, '',
+        () => openDay(d))).dataset.day = d;
       day.problems.forEach((id) => {
         const p = EXERCISES[id];
-        const item = document.createElement('li');
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'plan-problem';
-        button.dataset.exercise = id;
-        button.innerHTML = '<span class="problem-mark" aria-hidden="true"></span><span class="problem-text"><b></b><small></small></span><span class="problem-level"></span><span class="visually-hidden problem-state"></span>';
-        button.querySelector('b').textContent = p.title;
-        button.querySelector('small').textContent = `${p.topic} · about ${p.minutes} min`;
-        button.querySelector('.problem-level').textContent = p.difficulty;
-        button.querySelector('.problem-level').dataset.level = p.difficulty;
-        button.addEventListener('click', () => { selectExercise(id); window.scrollTo({ top: 0, behavior: 'smooth' }); });
-        item.append(button);
-        tasks.append(item);
+        addTask(taskButton('plan-problem', p.title, `${p.topic} · about ${p.minutes} min`, p.difficulty,
+          () => { selectExercise(id); window.scrollTo({ top: 0, behavior: 'smooth' }); })).dataset.exercise = id;
       });
       day.study.forEach((text, i) => {
         const item = document.createElement('li');
@@ -253,17 +278,22 @@ import { GUIDE } from './guide.js';
   function renderPlan() {
     let done = 0;
     PLAN.forEach((day, d) => {
-      const count = dayDone(day, d), total = day.problems.length + day.study.length;
+      const count = dayDone(day, d), total = dayTotal(day);
       done += count;
       const card = $('plan-days').children[d].firstElementChild;
       card.classList.toggle('complete', count === total);
       card.querySelector('.plan-day-count').textContent = count === total ? '✓ Done' : `${count} / ${total}`;
     });
-    document.querySelectorAll('.plan-problem').forEach((button) => {
-      const state = problemState(button.dataset.exercise);
-      button.className = `plan-problem ${state.cls}`;
-      button.querySelector('.problem-mark').textContent = state.mark;
-      button.querySelector('.problem-state').textContent = state.text;
+    document.querySelectorAll('.plan-guide').forEach((button) => {
+      const ids = idsFor(daySetId(Number(button.dataset.day)));
+      const right = ids.filter(quizCorrect).length;
+      const done = right === ids.length, started = ids.some((id) => saved.quiz[id]);
+      setTaskState(button, 'plan-problem plan-guide', done ? { cls: 'solved', mark: '✓', text: 'Done' }
+        : { cls: started ? 'attempted' : 'new', mark: started ? '•' : '', text: `${right} of ${ids.length} answered correctly` });
+      button.querySelector('.problem-level').textContent = `${right}/${ids.length}`;
+    });
+    document.querySelectorAll('.plan-problem[data-exercise]').forEach((button) => {
+      setTaskState(button, 'plan-problem', problemState(button.dataset.exercise));
     });
     document.querySelectorAll('.plan-study input').forEach((box) => { box.checked = !!saved.plan[box.dataset.key]; });
     $('plan-count').textContent = `${done} / ${PLAN_TOTAL}`;
@@ -272,17 +302,25 @@ import { GUIDE } from './guide.js';
   }
 
   /* ------------------------------------------------------------ concept quiz
-   * Each topic has a study guide (guide.js) and its questions. The quiz shows
-   * one question at a time: pick an option, check it, read the explanation.
+   * Each concept topic (guide.js, quiz.js) and each plan day (plan-guide.js)
+   * is a set: a study guide plus its questions. The quiz shows one question
+   * at a time: pick an option, check it, read the explanation.
    * saved.quiz[id] = { correct (ever answered correctly), last, at }. */
-  const QUESTIONS = Object.fromEntries(QUIZ.map((q) => [q.id, q]));
+  const DAY_QUESTIONS = DAY_GUIDES.flatMap((guide, d) => guide.quiz.map((q) => ({ ...q, topic: daySetId(d) })));
+  const QUESTIONS = Object.fromEntries([...QUIZ, ...DAY_QUESTIONS].map((q) => [q.id, q]));
+  const GUIDES = { ...GUIDE, ...Object.fromEntries(DAY_GUIDES.map((guide, d) => [daySetId(d), guide])) };
   const MIXED = { id: 'mixed', title: 'Mixed review', summary: 'All topics, shuffled' };
-  const QUIZ_SETS = [MIXED, ...QUIZ_TOPICS];
+  const QUIZ_SETS = [MIXED, ...QUIZ_TOPICS];   // the concept quiz's topic tabs
+  const DAY_SETS = PLAN.map((day, d) => ({ id: daySetId(d), title: day.title, day: d }));
+  const SETS = Object.fromEntries([...QUIZ_SETS, ...DAY_SETS].map((set) => [set.id, set]));
+  const SET_IDS = { [MIXED.id]: QUIZ.map((q) => q.id) };   // question ids per set, in order
+  [...QUIZ, ...DAY_QUESTIONS].forEach((q) => (SET_IDS[q.topic] ||= []).push(q.id));
+  const setFor = (id) => SETS[id];
+  const idsFor = (setId) => SET_IDS[setId] || [];
+  const isDaySet = (id) => SETS[id]?.day !== undefined;
   const quizCorrect = (id) => !!saved.quiz[id]?.correct;
   let quiz = null;   // { set, order, index, selected, checked, session }
-  let quizPart = saved.quizPart === 'quiz' ? 'quiz' : 'guide';   // which half of a topic is showing
-
-  const idsFor = (setId) => (setId === MIXED.id ? QUIZ : QUIZ.filter((q) => q.topic === setId)).map((q) => q.id);
+  let quizPart = saved.quizPart === 'quiz' ? 'quiz' : 'guide';   // which half of a set is showing
 
   function shuffled(ids) {
     const out = [...ids];
@@ -292,7 +330,8 @@ import { GUIDE } from './guide.js';
 
   function startQuiz(setId, order = setId === MIXED.id ? shuffled(idsFor(setId)) : idsFor(setId)) {
     quiz = { set: setId, order, index: 0, selected: null, checked: false, session: {} };
-    saved.quizSet = setId;
+    if (isDaySet(setId)) saved.daySet = setId;
+    else saved.quizSet = setId;
     persist();
     renderQuiz();
   }
@@ -301,7 +340,7 @@ import { GUIDE } from './guide.js';
      answered; after that, go straight to the questions. */
   function openTopic(setId) {
     const answered = idsFor(setId).some((id) => saved.quiz[id]);
-    setPart(GUIDE[setId] && !answered ? 'guide' : 'quiz', false);
+    setPart(GUIDES[setId] && !answered ? 'guide' : 'quiz', false);
     startQuiz(setId);
   }
 
@@ -313,12 +352,12 @@ import { GUIDE } from './guide.js';
   }
 
   function renderGuide(set) {
-    const guide = GUIDE[set.id];
+    const guide = GUIDES[set.id];
     $('guide-intro').innerHTML = guide.intro;
     $('guide-sections').innerHTML = guide.sections.map((s) => `<section class="guide-section"><h3>${s.title}</h3>${s.body}</section>`).join('');
     $('guide-tips').innerHTML = guide.tips.map((t) => `<li>${t}</li>`).join('');
     const count = idsFor(set.id).length;
-    $('guide-hint').textContent = `${count} questions on this topic follow.`;
+    $('guide-hint').textContent = `${count} questions on ${set.day === undefined ? 'this topic' : 'today\'s material'} follow.`;
     const finished = quiz.index >= quiz.order.length;
     $('guide-start').textContent = finished ? 'Retake the quiz →' : quiz.index > 0 || quiz.checked ? 'Back to the quiz →' : 'Start the quiz →';
   }
@@ -341,7 +380,7 @@ import { GUIDE } from './guide.js';
     const correct = QUIZ.filter((q) => quizCorrect(q.id)).length;
     $('quiz-progress').textContent = `${correct} / ${QUIZ.length}`;
     $('quiz-button-meta').textContent = correct ? `${correct} of ${QUIZ.length} questions answered correctly` : `${QUIZ_TOPICS.length} topics · ${QUIZ.length} questions`;
-    document.querySelectorAll('.quiz-topic').forEach((button) => {
+    $('quiz-topics').querySelectorAll('.quiz-topic').forEach((button) => {
       const ids = idsFor(button.dataset.quiz);
       const done = ids.filter(quizCorrect).length;
       button.classList.toggle('complete', done === ids.length);
@@ -351,12 +390,16 @@ import { GUIDE } from './guide.js';
   }
 
   function renderQuiz() {
-    const set = QUIZ_SETS.find((t) => t.id === quiz.set);
-    const reading = quizPart === 'guide' && !!GUIDE[set.id];
-    $('exercise-kicker').textContent = reading ? 'STUDY GUIDE' : `CONCEPT QUIZ · ${QUIZ.length} QUESTIONS`;
+    const set = setFor(quiz.set);
+    const day = set.day !== undefined;
+    const reading = quizPart === 'guide' && !!GUIDES[set.id];
+    $('exercise-kicker').textContent = day ? `DAY ${set.day + 1} · ${reading ? 'STUDY GUIDE' : 'QUIZ'}`
+      : reading ? 'STUDY GUIDE' : `CONCEPT QUIZ · ${QUIZ.length} QUESTIONS`;
     $('exercise-title').textContent = set.title;
-    $('quiz-parts').hidden = !GUIDE[set.id];
-    document.querySelectorAll('.quiz-part').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.part === (reading ? 'guide' : 'quiz'))));
+    $('quiz-topics').hidden = day;
+    $('quiz-back').hidden = !day;
+    $('quiz-parts').hidden = !GUIDES[set.id];
+    $('quiz-parts').querySelectorAll('.quiz-part').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.part === (reading ? 'guide' : 'quiz'))));
     $('quiz-guide').hidden = !reading;
     if (reading) {
       $('quiz-question').hidden = true;
@@ -419,9 +462,14 @@ import { GUIDE } from './guide.js';
       : 'Now try explaining each answer out loud, as you would in an interview.';
     $('quiz-retry').hidden = !missed;
     $('quiz-retry').textContent = `Retry the ${missed} you missed`;
-    const i = QUIZ_SETS.findIndex((t) => t.id === quiz.set);
-    $('quiz-next-topic').textContent = i + 1 < QUIZ_SETS.length ? `Next: ${QUIZ_SETS[i + 1].title} →` : 'Start again →';
-    $('quiz-review-guide').hidden = !(missed && GUIDE[quiz.set]);
+    const set = setFor(quiz.set);
+    if (set.day !== undefined) {
+      $('quiz-next-topic').textContent = set.day + 1 < PLAN.length ? `Next: Day ${set.day + 2} →` : 'Back to the training plan →';
+    } else {
+      const i = QUIZ_SETS.indexOf(set);
+      $('quiz-next-topic').textContent = i + 1 < QUIZ_SETS.length ? `Next: ${QUIZ_SETS[i + 1].title} →` : 'Start again →';
+    }
+    $('quiz-review-guide').hidden = !(missed && GUIDES[quiz.set]);
   }
 
   /* Move focus into the quiz so Enter checks the answer instead of
@@ -454,16 +502,85 @@ import { GUIDE } from './guide.js';
     $('quiz-check').focus();
   }
 
-  /* The workspace shows the open problem, the training plan or the quiz. */
+  /* ---------------------------------------------------------- learning guide
+   * One page summarising every area as "remember" and "understand" lists
+   * (notes.js), with links into the full guides and quizzes. */
+  function openGuide(setId) {
+    setPart('guide', false);
+    startQuiz(setId);
+    showView(isDaySet(setId) ? 'day' : 'quiz');
+    focusQuiz();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function buildNotes() {
+    $('notes-intro').innerHTML = NOTES_INTRO;
+    $('notes-jump').replaceChildren(...NOTES.map((area) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'quiz-topic notes-jump-link';
+      button.textContent = area.title;
+      button.addEventListener('click', () => $(`notes-${area.id}`).scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      return button;
+    }));
+    $('notes-areas').replaceChildren(...NOTES.map((area) => {
+      const section = document.createElement('section');
+      section.className = 'notes-area';
+      section.id = `notes-${area.id}`;
+      section.innerHTML = `<div class="notes-area-head"><h3></h3><p></p></div>
+        <div class="notes-cols">
+          <div class="notes-col notes-remember"><h4>What to remember</h4><ul>${area.remember.map((r) => `<li>${r}</li>`).join('')}</ul></div>
+          <div class="notes-col notes-understand"><h4>What to understand</h4><ul>${area.understand.map((u) => `<li><b>${u.title}.</b> ${u.body}</li>`).join('')}</ul></div>
+        </div>
+        <div class="notes-links"><span>Go deeper:</span></div>`;
+      section.querySelector('h3').textContent = area.title;
+      section.querySelector('.notes-area-head p').textContent = area.summary;
+      const links = section.querySelector('.notes-links');
+      const link = (label, setId) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'text-button';
+        button.textContent = label;
+        button.addEventListener('click', () => openGuide(setId));
+        links.append(button);
+      };
+      area.topics.forEach((id) => link(`${setFor(id).title} guide and quiz`, id));
+      area.days.forEach((n) => link(`Day ${n}: ${PLAN[n - 1].title}`, daySetId(n - 1)));
+      return section;
+    }));
+    document.querySelectorAll('.notes-show').forEach((button) => button.addEventListener('click', () => {
+      saved.notesShow = button.dataset.show;
+      persist();
+      renderNotesFilter();
+    }));
+    renderNotesFilter();
+  }
+
+  function renderNotesFilter() {
+    const show = ['remember', 'understand'].includes(saved.notesShow) ? saved.notesShow : 'all';
+    $('notes-panel').dataset.show = show;
+    document.querySelectorAll('.notes-show').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.show === show)));
+  }
+
+  /* The workspace shows the open problem, the training plan, the learning
+     guide, the concept quiz, or one plan day's guide and quiz ('day', shown
+     in the quiz panel). */
   function showView(next) {
-    const plan = next === 'plan', inQuiz = next === 'quiz';
+    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes';
     saved.view = next;
     persist();
     $('plan-panel').hidden = !plan;
-    $('quiz-panel').hidden = !inQuiz;
-    $('exercise-panel').hidden = plan || inQuiz;
-    $('plan-button').setAttribute('aria-pressed', String(plan));
-    $('plan-button-label').textContent = plan ? 'Back to the problem' : 'Open the training plan';
+    $('notes-panel').hidden = !inNotes;
+    $('quiz-panel').hidden = !(inQuiz || inDay);
+    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes;
+    $('notes-button').setAttribute('aria-pressed', String(inNotes));
+    $('notes-button-label').textContent = inNotes ? 'Back to the problem' : 'Learning guide';
+    if (inNotes) {
+      $('exercise-kicker').textContent = `LEARNING GUIDE · ${NOTES.length} AREAS`;
+      $('exercise-title').textContent = 'What to remember and understand';
+    }
+    $('plan-button').setAttribute('aria-pressed', String(plan || inDay));
+    $('plan-button-label').textContent = plan ? 'Back to the problem' : inDay ? 'Back to the training plan' : 'Open the training plan';
     $('quiz-button').setAttribute('aria-pressed', String(inQuiz));
     $('quiz-button-label').textContent = inQuiz ? 'Back to the problem' : 'Study guide and quiz';
     if (plan) {
@@ -471,9 +588,13 @@ import { GUIDE } from './guide.js';
       $('exercise-title').textContent = PLAN_TITLE;
     }
     if (inQuiz) {
-      if (quiz) renderQuiz();
-      else if (!QUIZ_SETS.some((t) => t.id === saved.quizSet)) openTopic(QUIZ_TOPICS[0].id);
+      if (quiz && !isDaySet(quiz.set)) renderQuiz();
+      else if (!SETS[saved.quizSet] || isDaySet(saved.quizSet)) openTopic(QUIZ_TOPICS[0].id);
       else startQuiz(saved.quizSet);
+    }
+    if (inDay) {
+      if (quiz && isDaySet(quiz.set)) renderQuiz();
+      else openTopic(isDaySet(saved.daySet) ? saved.daySet : daySetId(0));
     }
   }
 
@@ -499,16 +620,8 @@ import { GUIDE } from './guide.js';
       group.label = topic;
       ids.forEach((id) => {
         const p = EXERCISES[id];
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'problem-item';
+        const button = taskButton('problem-item', p.title, p.summary, p.difficulty, () => selectExercise(id));
         button.dataset.exercise = id;
-        button.innerHTML = '<span class="problem-mark" aria-hidden="true"></span><span class="problem-text"><b></b><small></small></span><span class="problem-level"></span><span class="visually-hidden problem-state"></span>';
-        button.querySelector('b').textContent = p.title;
-        button.querySelector('small').textContent = p.summary;
-        button.querySelector('.problem-level').textContent = p.difficulty;
-        button.querySelector('.problem-level').dataset.level = p.difficulty;
-        button.addEventListener('click', () => selectExercise(id));
         nav.append(button);
         const option = document.createElement('option');
         option.value = id;
@@ -678,25 +791,33 @@ import { GUIDE } from './guide.js';
 
   $('run-button').addEventListener('click', runCheck);
 
-  $('plan-button').addEventListener('click', () => {
-    if (saved.view === 'plan') selectExercise(active);
-    else showView('plan');
-  });
-
-  $('quiz-button').addEventListener('click', () => {
-    if (saved.view === 'quiz') selectExercise(active);
-    else { showView('quiz'); focusQuiz(); }
-  });
+  /* Each sidebar button opens its view, or returns to the problem when that
+     view is already open. */
+  const toggleView = (view, then = () => {}) => () => {
+    if (saved.view === view) { selectExercise(active); return; }
+    showView(view);
+    then();
+  };
+  $('plan-button').addEventListener('click', toggleView('plan'));
+  $('quiz-button').addEventListener('click', toggleView('quiz', focusQuiz));
+  $('notes-button').addEventListener('click', toggleView('notes', () => window.scrollTo({ top: 0 })));
+  $('quiz-back').addEventListener('click', () => showView('plan'));
 
   $('quiz-check').addEventListener('click', checkOrAdvance);
   $('quiz-retry').addEventListener('click', () => startQuiz(quiz.set, quiz.order.filter((id) => !quiz.session[id])));
   $('quiz-next-topic').addEventListener('click', () => {
-    const i = QUIZ_SETS.findIndex((t) => t.id === quiz.set);
+    const set = setFor(quiz.set);
+    if (set.day !== undefined) {
+      if (set.day + 1 < PLAN.length) openDay(set.day + 1);
+      else showView('plan');
+      return;
+    }
+    const i = QUIZ_SETS.indexOf(set);
     openTopic(QUIZ_SETS[(i + 1) % QUIZ_SETS.length].id);
     focusQuiz();
   });
   $('quiz-review-guide').addEventListener('click', () => { setPart('guide'); focusQuiz(); });
-  document.querySelectorAll('.quiz-part').forEach((b) => b.addEventListener('click', () => setPart(b.dataset.part)));
+  $('quiz-parts').querySelectorAll('.quiz-part').forEach((b) => b.addEventListener('click', () => setPart(b.dataset.part)));
   $('guide-start').addEventListener('click', () => {
     setPart('quiz', false);
     if (quiz.index >= quiz.order.length) startQuiz(quiz.set);   // finished: start afresh
@@ -707,7 +828,7 @@ import { GUIDE } from './guide.js';
 
   /* In the quiz, keys 1-9 choose an option and Enter checks or moves on. */
   document.addEventListener('keydown', (event) => {
-    if (saved.view !== 'quiz' || !quiz || !$('quiz-guide').hidden || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (!['quiz', 'day'].includes(saved.view) || !quiz || !$('quiz-guide').hidden || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.target.closest('input, textarea, select')) return;
     if (/^[1-9]$/.test(event.key) && quiz.index < quiz.order.length) {
       const i = Number(event.key) - 1;
@@ -749,7 +870,8 @@ import { GUIDE } from './guide.js';
   buildProblemList();
   buildPlan();
   buildQuizTopics();
+  buildNotes();
   startChecker();
   selectExercise(active);
-  if (startView === 'plan' || startView === 'quiz') showView(startView);
+  if (['plan', 'quiz', 'day', 'notes'].includes(startView)) showView(startView);
 })();

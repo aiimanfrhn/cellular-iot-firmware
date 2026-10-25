@@ -359,6 +359,9 @@ select:focus-visible {
 .quiz-topic[aria-pressed="true"] small { color: #d6efeb; }
 .quiz-panel .run-row { margin-top: 16px; }
 .quiz-panel:focus { outline: none; }
+.quiz-topics[hidden] { display: none; }
+.quiz-back { display: block; margin: -4px 0 14px; padding: 0; }
+.quiz-back[hidden] { display: none; }
 .quiz-parts { display: inline-flex; margin-bottom: 18px; padding: 3px; border-radius: 9px; background: #edf2f1; }
 .quiz-parts[hidden] { display: none; }
 .quiz-part {
@@ -371,6 +374,30 @@ select:focus-visible {
   cursor: pointer;
 }
 .quiz-part[aria-pressed="true"] { background: white; color: var(--ink); box-shadow: 0 1px 3px #13313c1f; }
+
+/* --------------------------------------------------------- learning guide */
+.notes-panel .plan-intro { margin-bottom: 16px; }
+.notes-jump { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.notes-area { padding: 22px 0 18px; border-bottom: 1px solid var(--line); scroll-margin-top: 16px; }
+.notes-area-head h3 { margin: 0; font: 700 18px var(--display); }
+.notes-area-head p { margin: 2px 0 12px; font-size: 13px; color: var(--muted); }
+.notes-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.notes-panel[data-show="remember"] .notes-cols,
+.notes-panel[data-show="understand"] .notes-cols { grid-template-columns: 1fr; }
+.notes-panel[data-show="remember"] .notes-understand,
+.notes-panel[data-show="understand"] .notes-remember { display: none; }
+.notes-col { padding: 13px 15px; border-radius: 10px; font-size: 13.5px; line-height: 1.55; color: #2c3f49; }
+.notes-col h4 { margin: 0 0 8px; font: 700 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.notes-col ul { margin: 0; padding-left: 18px; }
+.notes-col li { margin-bottom: 7px; }
+.notes-col li:last-child { margin-bottom: 0; }
+.notes-remember { background: var(--mint); border: 1px solid #cfe5e1; }
+.notes-remember h4 { color: var(--teal-dark); }
+.notes-understand { background: #fdf8ee; border: 1px solid #f0e2c4; }
+.notes-understand h4 { color: var(--amber); }
+.notes-col code { background: #ffffffb3; padding: 1px 4px; border-radius: 3px; color: #176862; font: 0.9em var(--mono); }
+.notes-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+.notes-links .text-button { padding: 0; text-align: left; }
 
 /* ------------------------------------------------------------ study guide */
 .guide { max-width: 78ch; font-size: 14.5px; line-height: 1.65; color: #2c3f49; }
@@ -763,6 +790,7 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .plan-day summary { flex-wrap: wrap; gap: 4px 10px; }
   .plan-day-title { flex-basis: 100%; order: 3; }
   .quiz-prompt { font-size: 15.5px; }
+  .notes-cols { grid-template-columns: 1fr; }
   .guide { font-size: 14px; }
   .quiz-parts { display: flex; }
   .quiz-part { flex: 1; }
