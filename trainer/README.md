@@ -1,0 +1,28 @@
+# Embedded C Trainer
+
+A browser based Week 1 practice site for the 12-week embedded programming plan. It has two exercises: bit operations and a byte ring buffer. Clang compiles and runs C11 checks inside a WebAssembly worker in the browser, so no Python server or native C toolchain is needed. Your source code is not sent to the website or a compiler service. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
+
+## Run locally
+
+Requirements: Node.js 22.12 or later. From this folder, run:
+
+```sh
+pnpm install
+pnpm dev
+```
+
+Open the local URL shown by Vite. Use `pnpm build` to create a static production site in `dist/`.
+
+## Workflow
+
+1. Select an exercise, edit the C code, and choose **Run checks**.
+2. Fix compiler errors or failing behavior checks. Passing both exercises updates the Week 1 progress display.
+3. Choose **Download .c**, copy the downloaded file into your repository, then commit and push it over SSH. The site does not store GitHub credentials or push code for you.
+
+Drafts and the last passing state live in this browser's local storage. Clearing browser site data removes them. The C compiler and submitted program run inside a WebAssembly worker, isolated by the browser. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
+
+The ring-buffer exercise uses `RingBuffer` and the `rb_init`, `rb_push`, and `rb_pop` signatures shown in the starter. Its checker verifies empty/full behavior, FIFO order, wraparound, and zero capacity.
+
+## Deploy to Vercel
+
+Import the GitHub repository into Vercel and set **Root Directory** to `trainer`. Leave the framework preset as Vite, use `pnpm build` as the build command, and `dist` as the output directory. The build copies the compiler's WebAssembly assets into the static site. Git-connected Vercel projects can create a preview deployment for each pull request and deploy production when the configured production branch changes.
