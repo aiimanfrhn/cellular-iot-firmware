@@ -18,6 +18,9 @@
    first newline, so code can start on the line after the backtick. */
 const C = (strings, ...values) => String.raw(strings, ...values).replace(/^\n/, '');
 
+/* Bump when checks get stricter, so earlier local passes must be re-run. */
+export const CHECKER_VERSION = 3;
+
 export const TOPICS = ['Bits and registers', 'Memory and pointers', 'Data and protocols', 'State machines'];
 
 export const PROBLEMS = [

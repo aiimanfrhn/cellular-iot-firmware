@@ -1,4 +1,4 @@
-import { PROBLEMS, TOPICS } from './problems.js';
+import { CHECKER_VERSION, PROBLEMS, TOPICS } from './problems.js';
 
 (() => {
   /* Problem data lives in problems.js; the sidebar list, the mobile picker
@@ -6,7 +6,6 @@ import { PROBLEMS, TOPICS } from './problems.js';
   const EXERCISES = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
   const ORDER = Object.keys(EXERCISES);
   const KEY = 'embedded-c-trainer-week1-v1';   // unchanged, so existing drafts load
-  const CHECKER_VERSION = 3;                   // bump when checks get stricter; older passes must re-run
   const DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
   const CHECK_TIMEOUT_MS = 30000;              // compile + run budget per check
   const INDENT = '    ';
@@ -27,6 +26,9 @@ import { PROBLEMS, TOPICS } from './problems.js';
     const r = saved.results[id];
     return !!(r && r.passed && r.version === CHECKER_VERSION && codeFor(id) === r.code);
   };
+  /* Problems passed on another device, reported by supabase-trainer.js. */
+  let cloudPassed = new Set();
+  const isSolved = (id) => isCurrentPass(id) || cloudPassed.has(id);
 
   /* ------------------------------------------------------------ checker state
    * pending remembers WHICH exercise was submitted, so a result is never filed
@@ -99,6 +101,7 @@ import { PROBLEMS, TOPICS } from './problems.js';
     pending = null;
     saved.results[exercise] = { exercise, passed: !!result.passed, code, version: CHECKER_VERSION, at: new Date().toISOString() };
     persist();
+    window.dispatchEvent(new CustomEvent('trainer:result', { detail: { ...saved.results[exercise] } }));
     lastResult[exercise] = { ...result, code };
     if (exercise === active) showResult(result);
     renderProgress();
@@ -133,6 +136,7 @@ import { PROBLEMS, TOPICS } from './problems.js';
     const r = saved.results[id];
     if (pending && pending.exercise === id) return { cls: 'checking', mark: '…', text: 'Checking…' };
     if (isCurrentPass(id)) return { cls: 'solved', mark: '✓', text: 'Solved' };
+    if (cloudPassed.has(id)) return { cls: 'solved', mark: '✓', text: 'Solved on another device' };
     if (r && r.passed && r.version !== CHECKER_VERSION) return { cls: 'attempted', mark: '•', text: 'Re-run checks' };
     if (r && r.passed) return { cls: 'attempted', mark: '•', text: 'Draft changed' };
     if (r) return { cls: 'attempted', mark: '•', text: 'Needs work' };
@@ -142,7 +146,7 @@ import { PROBLEMS, TOPICS } from './problems.js';
 
   function renderProgress() {
     const count = ORDER.length;
-    const solved = ORDER.filter(isCurrentPass);
+    const solved = ORDER.filter(isSolved);
     const left = count - solved.length;
     $('progress-count').textContent = `${solved.length} / ${count}`;
     $('progress-fill').style.width = `${(solved.length / count) * 100}%`;
@@ -154,7 +158,7 @@ import { PROBLEMS, TOPICS } from './problems.js';
       const row = document.createElement('div');
       row.className = 'stat-row';
       const name = document.createElement('span'); name.textContent = level;
-      const value = document.createElement('b'); value.textContent = `${ids.filter(isCurrentPass).length} / ${ids.length}`;
+      const value = document.createElement('b'); value.textContent = `${ids.filter(isSolved).length} / ${ids.length}`;
       row.append(name, value);
       return row;
     }));
@@ -168,7 +172,7 @@ import { PROBLEMS, TOPICS } from './problems.js';
       item.querySelector('.problem-state').textContent = state.text;
       $(`option-${id}`).textContent = `${state.cls === 'solved' ? '✓ ' : ''}${EXERCISES[id].title} · ${EXERCISES[id].difficulty}`;
     });
-    $('next-button').hidden = !(isCurrentPass(active) && nextProblem());
+    $('next-button').hidden = !(isSolved(active) && nextProblem());
   }
 
   /* The next unsolved problem after the active one, wrapping round. */
@@ -176,7 +180,7 @@ import { PROBLEMS, TOPICS } from './problems.js';
     const start = ORDER.indexOf(active);
     for (let step = 1; step < ORDER.length; step++) {
       const id = ORDER[(start + step) % ORDER.length];
-      if (!isCurrentPass(id)) return id;
+      if (!isSolved(id)) return id;
     }
     return null;
   }
@@ -394,6 +398,11 @@ import { PROBLEMS, TOPICS } from './problems.js';
   });
 
   /* ------------------------------------------------------------------ start */
+  window.addEventListener('trainer:cloud-progress', (event) => {
+    cloudPassed = new Set((event.detail || []).filter((id) => EXERCISES[id]));
+    renderProgress();
+  });
+
   buildProblemList();
   startChecker();
   selectExercise(active);
