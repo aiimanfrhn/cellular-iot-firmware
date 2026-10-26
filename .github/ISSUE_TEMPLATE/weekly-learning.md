@@ -1,6 +1,6 @@
 ---
 name: Weekly learning task
-about: Track one practical deliverable from the 12-week embedded learning plan
+about: Track one week of the interview prep plan or the firmware project plan
 title: "Week N: "
 assignees: ""
 ---
