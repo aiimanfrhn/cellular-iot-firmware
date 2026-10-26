@@ -45,20 +45,21 @@
 }
 
 /* Dark theme: follows the system unless the header toggle picked light, or
-   forced by the toggle. Both blocks hold the same values. */
+   forced by the toggle. Both blocks hold the same values. Status tints are
+   translucent washes of their accent so they sit cleanly on dark surfaces. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --ink: #e3ecea; --muted: #a9b9bd; --faint: #93a5aa; --line: #2b3e45;
     --mint: #163230; --paper: #0e191d; --white: #16242a;
     --green: #3aa877; --red: #d9655c; --amber: #d39a2e;
     --accent: #4fc4ba; --accent-strong: #74d6cc;
-    --surface: #16242a; --surface-soft: #132026; --subtle: #1e3036; --track: #293d44;
+    --surface: #16242a; --surface-soft: #132026; --subtle: #1e3036; --track: #22353b;
     --line-soft: #22353b; --line-strong: #31504f;
     --ink-2: #d2dfdc; --ink-3: #b3c3c6;
     --code-ink: #82d9cf; --code-bg: #1e3036; --code-bg-soft: #0e191d99; --mint-soft: #142b2a;
-    --ok-bg: #12291f; --ok-line: #2c5c45; --ok-tint: #1b3b2c; --ok-ink: #74d3a3;
-    --bad-bg: #2b1817; --bad-line: #6a3631; --bad-tint: #3e201e; --bad-ink: #f2a197;
-    --warn-bg: #2a2215; --warn-line: #5c4a23; --warn-tint: #3a2e15; --warn-ink: #e8bf6a;
+    --ok-bg: #3aa87714; --ok-line: #3aa87759; --ok-tint: #3aa87726; --ok-ink: #74d3a3;
+    --bad-bg: #d9655c14; --bad-line: #d9655c59; --bad-tint: #d9655c29; --bad-ink: #f2a197;
+    --warn-bg: #d39a2e12; --warn-line: #d39a2e4d; --warn-tint: #d39a2e24; --warn-ink: #e8bf6a;
     color-scheme: dark;
   }
 }
@@ -67,13 +68,13 @@
   --mint: #163230; --paper: #0e191d; --white: #16242a;
   --green: #3aa877; --red: #d9655c; --amber: #d39a2e;
   --accent: #4fc4ba; --accent-strong: #74d6cc;
-  --surface: #16242a; --surface-soft: #132026; --subtle: #1e3036; --track: #293d44;
+  --surface: #16242a; --surface-soft: #132026; --subtle: #1e3036; --track: #22353b;
   --line-soft: #22353b; --line-strong: #31504f;
   --ink-2: #d2dfdc; --ink-3: #b3c3c6;
   --code-ink: #82d9cf; --code-bg: #1e3036; --code-bg-soft: #0e191d99; --mint-soft: #142b2a;
-  --ok-bg: #12291f; --ok-line: #2c5c45; --ok-tint: #1b3b2c; --ok-ink: #74d3a3;
-  --bad-bg: #2b1817; --bad-line: #6a3631; --bad-tint: #3e201e; --bad-ink: #f2a197;
-  --warn-bg: #2a2215; --warn-line: #5c4a23; --warn-tint: #3a2e15; --warn-ink: #e8bf6a;
+  --ok-bg: #3aa87714; --ok-line: #3aa87759; --ok-tint: #3aa87726; --ok-ink: #74d3a3;
+  --bad-bg: #d9655c14; --bad-line: #d9655c59; --bad-tint: #d9655c29; --bad-ink: #f2a197;
+  --warn-bg: #d39a2e12; --warn-line: #d39a2e4d; --warn-tint: #d39a2e24; --warn-ink: #e8bf6a;
   color-scheme: dark;
 }
 
@@ -583,7 +584,19 @@ select:focus-visible {
 }
 .exercise-meta { display: flex; align-items: center; gap: 12px; }
 .exercise-meta .difficulty { padding: 5px 8px; }
+.exercise-meta { flex-wrap: wrap; row-gap: 6px; }
 .target-time { font-size: 12.5px; color: var(--muted); }
+/* Interview mode: the countdown, then the result once the checks pass. */
+.timer {
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--subtle);
+  color: var(--ink);
+  font: 600 12.5px var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.timer.over { background: var(--bad-tint); color: var(--bad-ink); }
+.timer.done { background: var(--ok-tint); color: var(--ok-ink); }
 .exercise-description {
   color: var(--ink-3);
   font-size: 14.5px;
@@ -607,6 +620,44 @@ select:focus-visible {
   color: var(--code-ink);
   font: 12.5px var(--mono);
 }
+
+/* -------------------------------------------------------------- welcome */
+.start-link { margin: -6px 0 14px -4px; }
+.welcome-paths { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 18px 0 16px; }
+.welcome-path {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 4px 12px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.welcome-path:hover { border-color: var(--accent); background: var(--mint); }
+.welcome-path b { font: 700 14.5px var(--display); }
+.welcome-path span:not(.welcome-icon) { grid-column: 2; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.welcome-icon {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--teal);
+  color: #fff;
+  font: 700 13px var(--mono);
+}
+.welcome-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+/* Progress card: backup buttons under the stats. */
+.progress-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 10px -4px 0; }
+.progress-note { margin: 4px 0 0; font-size: 12px; color: var(--faint); line-height: 1.5; }
+.progress-note.error { color: var(--red); }
 
 /* ------------------------------------------------------------------ hints */
 .hints {
@@ -704,6 +755,28 @@ select:focus-visible {
   overflow: auto;
 }
 .editor-wrap textarea::selection { background: #2b5e64; }
+.line-numbers span { display: block; }
+/* A line the compiler complained about; the bar runs the full gutter width. */
+.line-numbers .line-error {
+  margin: 0 -10px 0 -13px;
+  padding: 0 10px 0 13px;
+  background: #5a2a2a;
+  color: #ffd3cc;
+  box-shadow: inset 3px 0 #f0a59b;
+}
+
+/* "file.c:12:5" in compiler output: jumps to that spot in the editor. */
+.diag-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.diag-link:hover { text-decoration-style: solid; }
 
 /* -------------------------------------------------------------- run + result */
 .run-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 12px 0 14px; }
@@ -912,6 +985,7 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .topbar-end { flex: 1 1 100%; justify-content: space-between; gap: 8px; }
   .theme-toggle { margin-left: 0; padding: 5px 8px; }
   .theme-word { display: none; }
+  .welcome-paths { grid-template-columns: 1fr; }
   .layout { padding: 21px 15px 38px; }
   .workspace-head { align-items: flex-start; gap: 8px; flex-direction: column; }
   .exercise-panel,

@@ -35,12 +35,15 @@ int main(void)
 
   /* ---------------------------------------------------------------- storage */
   let saved = {};
+  let firstVisit = false;
+  try { firstVisit = !localStorage.getItem(KEY); } catch (_) {}
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (_) { saved = {}; }
   if (!saved.code) saved.code = {};
   if (!saved.results) saved.results = {};
   if (!saved.plan) saved.plan = {};   // study items ticked off in the training plan
   if (!saved.quiz) saved.quiz = {};   // concept quiz answers, keyed by question id
   if (!saved.hints) saved.hints = {}; // hints revealed per problem; one more than the hint count means the solution is open
+  if (!saved.best) saved.best = {};   // fastest timed solve per problem, in seconds
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {} }
 
   let active = EXERCISES[saved.active] ? saved.active : ORDER[0];
@@ -132,6 +135,7 @@ int main(void)
       return;
     }
     saved.results[exercise] = { exercise, passed: !!result.passed, code, version: CHECKER_VERSION, at: new Date().toISOString() };
+    if (result.passed && saved.timer && saved.timer.id === exercise) finishTimer(exercise);
     persist();
     window.dispatchEvent(new CustomEvent('trainer:result', { detail: { ...saved.results[exercise] } }));
     lastResult[exercise] = { ...result, code };
@@ -169,9 +173,58 @@ int main(void)
       : then.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
+  /* Lines with a compiler error or warning, per editor; editing clears them
+     because the line numbers no longer match. */
+  const errorLines = new Map();
+
   function updateLines(area = editor) {
     const n = Math.max(1, area.value.split('\n').length);
-    area.previousElementSibling.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
+    const marked = errorLines.get(area) || new Set();
+    area.previousElementSibling.innerHTML = Array.from({ length: n }, (_, i) =>
+      marked.has(i + 1) ? `<span class="line-error">${i + 1}</span>` : `<span>${i + 1}</span>`).join('');
+  }
+
+  /* Put the caret at line:col in an editor and scroll it into view. */
+  function goToLine(area, line, col = 1) {
+    const lines = area.value.split('\n');
+    const row = Math.min(Math.max(line, 1), lines.length);
+    let offset = 0;
+    for (let i = 0; i < row - 1; i++) offset += lines[i].length + 1;
+    offset += Math.min(Math.max(col - 1, 0), lines[row - 1].length);
+    area.focus();
+    area.setSelectionRange(offset, offset);
+    const lineHeight = parseFloat(getComputedStyle(area).lineHeight) || 20;
+    area.scrollTop = Math.max(0, (row - 1) * lineHeight - area.clientHeight / 3);
+    area.closest('.editor-wrap').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  /* Show compiler output in pre, turning each "file:line:col:" that points
+     into the learner's file into a link to that spot, and mark those lines
+     in the editor gutter. Diagnostics in checker.c are left as plain text. */
+  function showDiagnostics(pre, text, area, filename) {
+    const marked = new Set();
+    const pattern = /^(.+?):(\d+):(\d+): (error|warning|note|fatal error)/;
+    pre.replaceChildren(...text.split('\n').flatMap((line, i) => {
+      const nodes = i ? [document.createTextNode('\n')] : [];
+      const m = pattern.exec(line);
+      if (!m || m[1] !== filename) return [...nodes, document.createTextNode(line)];
+      const [where, , row, col, kind] = m;
+      if (kind !== 'note') marked.add(Number(row));
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'diag-link';
+      link.textContent = where.slice(0, where.length - kind.length - 2);
+      link.title = `Go to line ${row}`;
+      link.addEventListener('click', () => goToLine(area, Number(row), Number(col)));
+      return [...nodes, link, document.createTextNode(line.slice(link.textContent.length))];
+    }));
+    errorLines.set(area, new Set([...(errorLines.get(area) || []), ...marked]));
+    updateLines(area);
+  }
+  function clearDiagnostics(area) {
+    if (!errorLines.has(area)) return;
+    errorLines.delete(area);
+    updateLines(area);
   }
 
   function problemState(id) {
@@ -601,14 +654,19 @@ int main(void)
      guide, the concept quiz, the C sandbox, or one plan day's guide and quiz
      ('day', shown in the quiz panel). */
   function showView(next) {
-    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes', inSandbox = next === 'sandbox';
+    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes', inSandbox = next === 'sandbox', inWelcome = next === 'welcome';
     saved.view = next;
     persist();
     $('plan-panel').hidden = !plan;
     $('notes-panel').hidden = !inNotes;
     $('quiz-panel').hidden = !(inQuiz || inDay);
     $('sandbox-panel').hidden = !inSandbox;
-    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes || inSandbox;
+    $('welcome-panel').hidden = !inWelcome;
+    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes || inSandbox || inWelcome;
+    if (inWelcome) {
+      $('exercise-kicker').textContent = 'WELCOME';
+      $('exercise-title').textContent = 'Where would you like to start?';
+    }
     $('sandbox-button').setAttribute('aria-pressed', String(inSandbox));
     $('sandbox-button-label').textContent = inSandbox ? 'Back to the problem' : 'C sandbox';
     if (inSandbox) {
@@ -705,7 +763,8 @@ int main(void)
     $('result-icon').textContent = icon;
     $('result-title').textContent = title;
     $('result-message').textContent = message;
-    $('result-output').textContent = output;
+    clearDiagnostics(editor);
+    showDiagnostics($('result-output'), output, editor, EXERCISES[active].filename);
     $('result-output').hidden = !output;
     $('result-compiler').textContent = compiler;
     renderChecklist(checks);
@@ -715,18 +774,22 @@ int main(void)
      elements and the wording that differs between them. */
   const PROBLEM_OUTPUT = {
     panel: 'program-panel', meta: 'program-meta', out: 'program-output', note: 'program-note',
+    source: () => [editor, EXERCISES[active].filename],
     error: 'could not build on its own',
     none: 'Your code has no main(), so there is nothing to run. Add one to print values while you work; the checker ignores it.',
   };
   const SANDBOX_OUTPUT = {
     panel: 'sandbox-output-panel', meta: 'sandbox-meta', out: 'sandbox-output', note: 'sandbox-note',
+    source: () => [sandbox, SANDBOX_FILE],
     error: 'did not compile',
     none: 'Your code has no main(), so there is nothing to run.',
   };
 
   function renderProgram(program, view = PROBLEM_OUTPUT) {
     const panel = $(view.panel), out = $(view.out), note = $(view.note);
+    const [area, filename] = view.source();
     panel.hidden = !program;
+    if (view === SANDBOX_OUTPUT) clearDiagnostics(area);   // the problem's are cleared by setPanel
     if (!program) return;
     panel.className = `program-panel ${program.state}`;
     const meta = {
@@ -744,7 +807,8 @@ int main(void)
       note.textContent = '';
     }
     note.hidden = !note.textContent;
-    out.textContent = program.output;
+    if (program.state === 'error') showDiagnostics(out, program.output, area, filename);
+    else out.textContent = program.output;
     out.hidden = !program.output.trim();
   }
 
@@ -768,7 +832,7 @@ int main(void)
      Hint text and explanations are trusted HTML from hints.js. */
   function renderHints() {
     const entry = HINTS[active];
-    $('hints').hidden = !entry;
+    $('hints').hidden = !entry || timerRunning();   // no hints in a timed attempt, as in an interview
     if (!entry) return;
     const shown = Math.min(saved.hints[active] || 0, entry.hints.length + 1);
     const hintsShown = Math.min(shown, entry.hints.length);
@@ -793,6 +857,71 @@ int main(void)
     renderHints();
   }
 
+  /* ----------------------------------------------------------- interview mode
+   * A timed attempt counts down from the problem's target time and keeps
+   * counting past it. Passing the checks stops it and records the time;
+   * saved.timer survives a reload, and only one attempt runs at a time. */
+  let timerTick = null;
+  let lastTimed = null;   // { id, seconds } of the attempt that just finished
+  const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  const timerRunning = () => !!(saved.timer && saved.timer.id === active);
+
+  function renderTimer() {
+    const meta = EXERCISES[active], target = meta.minutes * 60, best = saved.best[active];
+    const el = $('timer'), button = $('timer-button');
+    clearInterval(timerTick); timerTick = null;
+    $('exercise-time').textContent = `Aim for about ${meta.minutes} minutes${best ? ` · best ${clock(best)}` : ''}`;
+    if (timerRunning()) {
+      const { startedAt } = saved.timer;
+      const update = () => {
+        const left = target - Math.floor((Date.now() - startedAt) / 1000);
+        el.textContent = left >= 0 ? `${clock(left)} left` : `${clock(-left)} over`;
+        el.className = `timer${left < 0 ? ' over' : ''}`;
+      };
+      update();
+      timerTick = setInterval(update, 1000);
+      el.hidden = false;
+      button.textContent = 'Stop timer';
+    } else if (lastTimed && lastTimed.id === active) {
+      const within = lastTimed.seconds <= target;
+      el.textContent = `Solved in ${clock(lastTimed.seconds)}${within ? ', within the target' : ', over the target'}`;
+      el.className = `timer ${within ? 'done' : 'over'}`;
+      el.hidden = false;
+      button.textContent = 'Try again, timed';
+    } else {
+      el.hidden = true;
+      button.textContent = 'Start timed attempt';
+    }
+  }
+
+  function finishTimer(id) {
+    const seconds = Math.max(1, Math.round((Date.now() - saved.timer.startedAt) / 1000));
+    delete saved.timer;
+    saved.best[id] = Math.min(saved.best[id] || Infinity, seconds);
+    lastTimed = { id, seconds };
+    if (id === active) { renderTimer(); renderHints(); }
+  }
+
+  $('timer-button').addEventListener('click', () => {
+    if (timerRunning()) {
+      delete saved.timer;
+    } else {
+      const starter = EXERCISES[active].starter;
+      if (isCurrentPass(active) && editor.value !== starter) {
+        if (!confirm('This problem is already solved, so the timed attempt starts from the starter code. Your current code is replaced; download it first to keep it.')) return;
+        editor.value = starter;
+        editor.dispatchEvent(new Event('input'));
+        showIdle();
+      }
+      saved.timer = { id: active, startedAt: Date.now() };
+      lastTimed = null;
+      editor.focus();
+    }
+    persist();
+    renderTimer();
+    renderHints();
+  });
+
   function selectExercise(id) {
     active = id;
     saved.active = id;
@@ -807,7 +936,7 @@ int main(void)
     $('exercise-title').textContent = meta.title;
     $('exercise-difficulty').textContent = meta.difficulty.toUpperCase();
     $('exercise-difficulty').dataset.level = meta.difficulty;
-    $('exercise-time').textContent = `Aim for about ${meta.minutes} minutes`;
+    renderTimer();
     $('exercise-description').textContent = meta.description;
     $('requirements').innerHTML = meta.requirements;
     $('followups').innerHTML = meta.followups.map((q) => `<li>${q}</li>`).join('');
@@ -862,6 +991,7 @@ int main(void)
       }
     });
     area.addEventListener('scroll', () => { area.previousElementSibling.scrollTop = area.scrollTop; });
+    area.addEventListener('input', () => clearDiagnostics(area));
   }
   bindEditorKeys(editor, runCheck);
   bindEditorKeys(sandbox, runSandbox);
@@ -910,6 +1040,19 @@ int main(void)
   $('quiz-button').addEventListener('click', toggleView('quiz', focusQuiz));
   $('notes-button').addEventListener('click', toggleView('notes', () => window.scrollTo({ top: 0 })));
   $('sandbox-button').addEventListener('click', toggleView('sandbox', () => sandbox.focus()));
+  $('welcome-button').addEventListener('click', toggleView('welcome', () => window.scrollTo({ top: 0, behavior: 'smooth' })));
+
+  /* Each path on the welcome page opens the part of the site that fits it. */
+  const WELCOME_PATHS = {
+    learn: () => { showView('quiz'); focusQuiz(); },
+    problems: () => { selectExercise(ORDER[0]); $('code-editor').focus(); },
+    plan: () => showView('plan'),
+    sandbox: () => { showView('sandbox'); sandbox.focus(); },
+  };
+  document.querySelectorAll('.welcome-path').forEach((button) => button.addEventListener('click', () => {
+    WELCOME_PATHS[button.dataset.path]();
+    window.scrollTo({ top: 0 });
+  }));
   $('quiz-back').addEventListener('click', () => showView('plan'));
 
   $('quiz-check').addEventListener('click', checkOrAdvance);
@@ -960,15 +1103,15 @@ int main(void)
     setPanel('idle', '↳', 'Starter restored', 'Your saved draft for this exercise was replaced with the starter code.');
   });
 
-  function downloadC(code, filename) {
-    const blob = new Blob([code], { type: 'text/x-c' });
+  function downloadFile(text, filename, type = 'text/x-c') {
+    const blob = new Blob([text], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);   // revoking immediately can cancel the download in Firefox
   }
-  $('download-button').addEventListener('click', () => downloadC(editor.value, EXERCISES[active].filename));
+  $('download-button').addEventListener('click', () => downloadFile(editor.value, EXERCISES[active].filename));
 
   /* ---------------------------------------------------------- share links
    * A link carries the sandbox code and stdin in the URL hash, deflated and
@@ -1022,8 +1165,53 @@ int main(void)
   }
   window.addEventListener('hashchange', openSharedLink);
 
+  /* ----------------------------------------------------------------- backup
+   * One JSON file holds everything this browser stores for the trainer:
+   * drafts, results, plan ticks, quiz answers, hints, sandbox code and theme. */
+  const BACKUP_APP = 'embedded-c-trainer';
+  const backupNote = (text, error = false) => {
+    $('backup-note').textContent = text;
+    $('backup-note').classList.toggle('error', error);
+  };
+
+  $('export-button').addEventListener('click', () => {
+    const exportedAt = new Date().toISOString();
+    const backup = { app: BACKUP_APP, format: 1, exportedAt, progress: saved, theme };
+    downloadFile(JSON.stringify(backup, null, 2), `${BACKUP_APP}-progress-${exportedAt.slice(0, 10)}.json`, 'application/json');
+    backupNote('Progress exported. Keep the file somewhere safe; Import from file restores it.');
+  });
+
+  $('import-button').addEventListener('click', () => $('import-file').click());
+  $('import-file').addEventListener('change', async () => {
+    const file = $('import-file').files[0];
+    $('import-file').value = '';   // so choosing the same file again still fires change
+    if (!file) return;
+    let backup;
+    try {
+      backup = JSON.parse(await file.text());
+    } catch (_) {
+      backupNote('That file is not a trainer backup: it is not valid JSON.', true);
+      return;
+    }
+    const progress = backup && backup.app === BACKUP_APP ? backup.progress : null;
+    if (!progress || typeof progress !== 'object' || Array.isArray(progress)) {
+      backupNote('That file is not a trainer backup. Choose a file made with Export progress.', true);
+      return;
+    }
+    const when = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : 'an unknown date';
+    if (!confirm(`Replace the progress in this browser with the backup from ${when}? What is here now will be lost; export it first if you want to keep it.`)) return;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(progress));
+      if (THEMES.includes(backup.theme)) localStorage.setItem(THEME_KEY, backup.theme);
+    } catch (_) {
+      backupNote('This browser would not save the backup. Check that site storage is allowed.', true);
+      return;
+    }
+    location.reload();
+  });
+
   $('sandbox-run').addEventListener('click', runSandbox);
-  $('sandbox-download').addEventListener('click', () => downloadC(sandbox.value, SANDBOX_FILE));
+  $('sandbox-download').addEventListener('click', () => downloadFile(sandbox.value, SANDBOX_FILE));
   $('sandbox-reset').addEventListener('click', () => {
     if (sandbox.value !== SANDBOX_STARTER && !confirm('Replace your sandbox code with the example? Download it first if you want to keep it.')) return;
     sandbox.value = SANDBOX_STARTER;
@@ -1068,6 +1256,7 @@ int main(void)
   updateLines(sandbox);
   startChecker();
   selectExercise(active);
-  if (['plan', 'quiz', 'day', 'notes', 'sandbox'].includes(startView)) showView(startView);
+  if (['plan', 'quiz', 'day', 'notes', 'sandbox', 'welcome'].includes(startView)) showView(startView);
+  if (firstVisit) showView('welcome');
   openSharedLink();
 })();

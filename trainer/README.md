@@ -24,6 +24,10 @@ Every problem has a **Stuck?** box with three hints, revealed one at a time from
 
 The **theme** button in the header switches between the system setting, light and dark.
 
+A first visit opens a **welcome page** that asks what you are here for (learning C, firmware interviews, network platform roles, or just trying C) and opens the matching part of the site. The *New here?* link in the sidebar brings it back.
+
+**Start timed attempt** turns a problem into a mock interview: it counts down from the problem's target time, hides the hints, and records your time when the checks pass. The best time shows next to the target.
+
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
 ## Run locally
@@ -44,11 +48,11 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 ## Workflow
 
 1. Pick a problem from the sidebar (or the picker on a phone), edit the C code, and choose **Run checks** (Ctrl+Enter).
-2. Fix compiler errors, failing checks, or undefined-behaviour crashes. Solved problems are ticked and counted by difficulty.
+2. Fix compiler errors, failing checks, or undefined-behaviour crashes. Lines with errors are marked in the editor's gutter, and each `file.c:line:col` in the output jumps to that spot. Solved problems are ticked and counted by difficulty.
 3. Read the follow-up questions and practise answering them out loud.
 4. Choose **Download .c** to keep your solution, for example in your portfolio repository.
 
-Drafts, results, ticked plan items and quiz answers live in this browser's local storage. Clearing browser site data removes them. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
+Drafts, results, ticked plan items, quiz answers, hints, best times and sandbox code live in this browser's local storage. Clearing browser site data removes them, so use **Export progress** in the progress card to save a backup file, and **Import from file** to restore it here or on another computer. The compiler runtime is provided by [`@live-codes/clang-wasm`](https://www.npmjs.com/package/@live-codes/clang-wasm).
 
 ## How checking works
 
