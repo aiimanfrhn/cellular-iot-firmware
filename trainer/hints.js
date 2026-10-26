@@ -1614,4 +1614,273 @@ FanLevel fan_update(FanCtl *f, int32_t temp_mc)
 }
 `,
   },
+  bug_adc_macros: {
+    hints: [
+      'Both bugs are in the two <code>#define</code> lines and how they are used. Expand each macro by hand at its call site in <code>adc_peak_mv</code>, with the actual argument text pasted in.',
+      'One macro has a precedence bug: its parameter is not parenthesised, so an argument like <code>peak - offset_counts</code> splits apart. The other evaluates an argument twice, and that argument has a side effect.',
+      'Write <code>((count) * ADC_FULL_SCALE_MV / ADC_MAX_COUNT)</code>, and read the sample into a local before comparing: <code>uint16_t sample = adc_read(); peak = MAX(peak, sample);</code>. Otherwise <code>MAX</code> calls <code>adc_read</code> a second time whenever the new sample wins, and returns that second sample.',
+    ],
+    explain: '<code>ADC_TO_MV(peak - offset_counts)</code> expanded to <code>peak - offset_counts * 3300u / 4095u</code>, because the macro parameter was not in parentheses. <code>MAX(peak, adc_read())</code> pasted the call into both the comparison and the result, so the ADC was read again whenever the new sample was larger, consuming an extra sample and returning a value that was never compared.',
+    solution: C`
+#include <stdint.h>
+
+#define ADC_FULL_SCALE_MV  3300u
+#define ADC_MAX_COUNT      4095u
+
+/* Convert a 12-bit ADC count to millivolts, rounding down. */
+#define ADC_TO_MV(count)   ((count) * ADC_FULL_SCALE_MV / ADC_MAX_COUNT)
+
+/* The larger of two values. */
+#define MAX(a, b)          ((a) > (b) ? (a) : (b))
+
+/* Provided by the HAL: start a conversion, wait for it and return the
+   12-bit result. Every call consumes one new sample. */
+uint16_t adc_read(void);
+
+/* Take n samples (n >= 1) and return the largest one in millivolts, after
+   subtracting the board's fixed offset. offset_counts is never larger
+   than a sample. */
+uint32_t adc_peak_mv(unsigned n, uint16_t offset_counts)
+{
+    uint16_t peak = 0u;
+
+    for (unsigned i = 0u; i < n; i++) {
+        uint16_t sample = adc_read();
+        peak = MAX(peak, sample);
+    }
+    return ADC_TO_MV(peak - offset_counts);
+}
+`,
+  },
+  bug_hex_checksum: {
+    hints: [
+      'One bug is in the summing loop of <code>frame_sum16</code>; the other is in what <code>sum16_to_hex</code> leaves in <code>out</code> after the loop. Try a frame containing the byte 0x80.',
+      'The first is a sign-extension bug: plain <code>char</code> is signed here, so bytes 0x80 to 0xFF are added as negative numbers. The second is a string that is never terminated.',
+      'Add <code>(uint8_t)frame[i]</code> so each byte counts as 0 to 255, and write <code>out[4] = \'\\0\';</code> after the loop. The original only looked right because test buffers happened to hold a zero after the four digits.',
+    ],
+    explain: '<code>sum += frame[i]</code> promoted a signed <code>char</code> such as 0x80 to the <code>int</code> -128, so binary bytes were subtracted instead of added; casting to <code>uint8_t</code> first makes every byte 0 to 255. <code>sum16_to_hex</code> wrote four digits but no NUL, so the caller\'s string ran on into whatever followed in memory.',
+    solution: C`
+#include <stddef.h>
+#include <stdint.h>
+
+static const char hex_digits[] = "0123456789ABCDEF";
+
+/* 16-bit additive checksum: the sum of every byte of the frame, each byte
+   taken as an unsigned value 0..255, modulo 65536. */
+uint16_t frame_sum16(const char *frame, size_t len)
+{
+    uint16_t sum = 0u;
+
+    for (size_t i = 0u; i < len; i++) {
+        sum += (uint8_t)frame[i];
+    }
+    return sum;
+}
+
+/* Write sum as exactly four uppercase hex digits followed by a NUL, so out
+   must hold at least 5 bytes. 0x01AF becomes "01AF". */
+void sum16_to_hex(uint16_t sum, char *out)
+{
+    for (int i = 0; i < 4; i++) {
+        out[i] = hex_digits[(sum >> (12 - 4 * i)) & 0xFu];
+    }
+    out[4] = '\0';
+}
+
+/* Append the checksum of frame[0..len) as hex text at frame + len. The
+   caller guarantees room for 5 more bytes. Return the new length. */
+size_t frame_append_sum(char *frame, size_t len)
+{
+    sum16_to_hex(frame_sum16(frame, len), frame + len);
+    return len + 4u;
+}
+`,
+  },
+  bug_be_counters: {
+    hints: [
+      'One bug is in the return expression of <code>be32_read</code>; the other is in the copy loop of <code>parse_counters</code>. Try a counter whose first byte is 0x80, and count how many elements of <code>out</code> the loop writes.',
+      'The first is integer promotion: <code>p[0]</code> becomes a signed <code>int</code> before the shift, so <code>0x80 &lt;&lt; 24</code> overflows. The second is an off-by-one in the loop bound.',
+      'Cast before shifting: <code>((uint32_t)p[0] &lt;&lt; 24)</code> (and the same for the other bytes), and loop with <code>i &lt; n</code>. With <code>&lt;=</code> the loop copies <code>n + 1</code> counters and writes one element past what the caller allowed.',
+    ],
+    explain: 'A <code>uint8_t</code> is promoted to <code>int</code> before <code>&lt;&lt;</code>, so <code>p[0] &lt;&lt; 24</code> with <code>p[0] &gt;= 0x80</code> shifts into the sign bit, which is undefined behaviour; casting to <code>uint32_t</code> first keeps the shift unsigned. The loop bound <code>i &lt;= n</code> copied one counter too many, writing past the <code>max</code> elements the caller provided and reading past the counters in the frame.',
+    solution: C`
+#include <stddef.h>
+#include <stdint.h>
+
+/* Read a big-endian (network order) 32-bit value from p. */
+uint32_t be32_read(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+}
+
+/* A counters report is one count byte N followed by N big-endian 32-bit
+   counters. Copy the first min(N, max) counters into out and return how
+   many were copied. Return -1 if len is too short to hold all N. */
+int parse_counters(const uint8_t *frame, size_t len, uint32_t *out, size_t max)
+{
+    if (len < 1u) {
+        return -1;
+    }
+    size_t n = frame[0];
+    if (len < 1u + 4u * n) {
+        return -1;
+    }
+    if (n > max) {
+        n = max;
+    }
+    for (size_t i = 0u; i < n; i++) {
+        out[i] = be32_read(&frame[1u + 4u * i]);
+    }
+    return (int)n;
+}
+`,
+  },
+  bug_tick_timeout: {
+    hints: [
+      'One bug is in the arithmetic of <code>ms_to_ticks</code>; the other is the comparison in <code>tick_expired</code>. Try 1500 ms, and a deadline just after the counter wraps to 0.',
+      'The first is integer division done before multiplication, which throws away the remainder. The second is a direct comparison of two wrapping tick values.',
+      'Multiply first: <code>ms * TICK_HZ / 1000u</code> (one hour is 3,686,400,000, which still fits in 32 bits). Compare the difference instead of the values: <code>(now - deadline) &lt; 0x80000000u</code>. The unsigned subtraction wraps the same way the counter does, so it measures how far <code>now</code> is past the deadline.',
+    ],
+    explain: '<code>ms / 1000u * TICK_HZ</code> dropped everything below a whole second, so 1500 ms became 1024 ticks and 10 ms became 0; multiplying first keeps the precision. <code>now &gt;= deadline</code> is wrong once a deadline wraps past 0 (it looks smaller than <code>now</code>, so it fires at once) or <code>now</code> wraps (it looks smaller than the deadline); testing whether the unsigned difference <code>now - deadline</code> is below 2^31 works across the wrap.',
+    solution: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+#define TICK_HZ 1024u   /* the RTC tick interrupt runs at 1024 Hz */
+
+/* Convert milliseconds to ticks, rounding down. ms is at most 3600000
+   (one hour). */
+uint32_t ms_to_ticks(uint32_t ms)
+{
+    return ms * TICK_HZ / 1000u;
+}
+
+/* The tick counter is a free-running uint32_t that wraps to 0 about every
+   48.5 days. Return the tick at which a timeout of ms starting at now
+   expires. */
+uint32_t deadline_after(uint32_t now, uint32_t ms)
+{
+    return now + ms_to_ticks(ms);
+}
+
+/* Return true once now has reached or passed deadline. This must keep
+   working when the counter wraps between the start and the deadline;
+   timeouts are always shorter than 2^31 ticks. */
+bool tick_expired(uint32_t now, uint32_t deadline)
+{
+    return (now - deadline) < 0x80000000u;
+}
+`,
+  },
+  bug_encoder_fuse: {
+    hints: [
+      'One bug is in the return expression of <code>status_quality</code>; the other is in <code>midpoint_u32</code>. Work out <code>status_quality(0xA3)</code> by hand, and try two positions near <code>UINT32_MAX</code>.',
+      'The first is operator precedence: <code>&gt;&gt;</code> binds tighter than <code>&amp;</code>. The second is unsigned overflow: <code>a + b</code> wraps before the division.',
+      'Write <code>(status &amp; ST_QUALITY_MASK) &gt;&gt; ST_QUALITY_SHIFT</code>; without the parentheses it masked with <code>0xF0 &gt;&gt; 4</code>, which is <code>0x0F</code>, and returned the valid bits. For the midpoint, halve before adding: <code>a / 2u + b / 2u + (a &amp; b &amp; 1u)</code>, where the last term adds back the 1 lost when both are odd.',
+    ],
+    explain: '<code>status &amp; ST_QUALITY_MASK &gt;&gt; ST_QUALITY_SHIFT</code> parsed as <code>status &amp; (0xF0 &gt;&gt; 4)</code>, so it returned bits 3 to 0 instead of 7 to 4. <code>(a + b) / 2u</code> wraps modulo 2^32 when the sum passes <code>UINT32_MAX</code>, so large positions came out near zero; halving each operand first cannot overflow.',
+    solution: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+/* Status byte from the dual encoder front end:
+   bit 0      encoder A reading valid
+   bit 1      encoder B reading valid
+   bits 7..4  signal quality, 0 (worst) to 15 (best) */
+#define ST_A_VALID        0x01u
+#define ST_B_VALID        0x02u
+#define ST_QUALITY_MASK   0xF0u
+#define ST_QUALITY_SHIFT  4u
+#define MIN_QUALITY       4u
+
+/* Return the 4-bit signal quality field. */
+unsigned status_quality(uint8_t status)
+{
+    return (status & ST_QUALITY_MASK) >> ST_QUALITY_SHIFT;
+}
+
+/* Midpoint of two positions, rounded down. Positions use the full
+   uint32_t range. */
+uint32_t midpoint_u32(uint32_t a, uint32_t b)
+{
+    return a / 2u + b / 2u + (a & b & 1u);
+}
+
+/* Fuse the two encoder positions into *pos. Return false if the quality
+   is below MIN_QUALITY or neither reading is valid. */
+bool encoder_fuse(uint32_t a, uint32_t b, uint8_t status, uint32_t *pos)
+{
+    bool a_ok = (status & ST_A_VALID) != 0u;
+    bool b_ok = (status & ST_B_VALID) != 0u;
+
+    if (status_quality(status) < MIN_QUALITY || (!a_ok && !b_ok)) {
+        return false;
+    }
+    *pos = (a_ok && b_ok) ? midpoint_u32(a, b) : (a_ok ? a : b);
+    return true;
+}
+`,
+  },
+  bug_uart_ring: {
+    hints: [
+      'All three bugs are in <code>rb_put</code> and <code>rb_get</code>; <code>rb_init</code>, <code>rb_count</code> and <code>rb_read</code> are correct. For each, compare the code with the comment above the struct, and trace 9 puts into an empty FIFO.',
+      'One is a full test with the wrong boundary. One is an order-of-operations bug: the index is advanced before the byte is stored. One is an array index that is never wrapped into range.',
+      'Refuse the byte when <code>rb_count(rb) &gt;= RB_SIZE</code>; write <code>rb->buf[rb->head &amp; RB_MASK] = byte; rb->head++;</code> so the byte goes into the slot <code>rb_get</code> reads next (and the ISR publishes it only once it is stored); and read <code>rb->buf[rb->tail &amp; RB_MASK]</code>, because <code>tail</code> counts up to 255 and indexes far past the 8-byte array.',
+    ],
+    explain: 'The full test <code>&gt; RB_SIZE</code> let a ninth byte in, overwriting the oldest one. The pre-increment <code>++rb-&gt;head</code> stored each byte one slot ahead of where <code>rb_get</code> looks, and advanced <code>head</code> before the data was there for a concurrent reader. <code>rb_get</code> indexed with the raw free-running <code>tail</code>, which runs past the end of <code>buf</code> after 8 bytes; it must be masked like <code>head</code>.',
+    solution: C`
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define RB_SIZE 8u                  /* a power of two that divides 256 */
+#define RB_MASK (RB_SIZE - 1u)
+
+/* head and tail are free-running counters that wrap at 256. The ISR
+   stores a byte and then advances head; the main loop takes a byte and
+   then advances tail. Index the array with counter & RB_MASK. */
+typedef struct {
+    uint8_t buf[RB_SIZE];
+    uint8_t head;
+    uint8_t tail;
+} uart_rb_t;
+
+void rb_init(uart_rb_t *rb) { rb->head = 0u; rb->tail = 0u; }
+
+/* Number of bytes stored, 0..RB_SIZE. */
+size_t rb_count(const uart_rb_t *rb) { return (uint8_t)(rb->head - rb->tail); }
+
+/* Called from the RX interrupt. Return false and drop the byte if full. */
+bool rb_put(uart_rb_t *rb, uint8_t byte)
+{
+    if (rb_count(rb) >= RB_SIZE) {
+        return false;
+    }
+    rb->buf[rb->head & RB_MASK] = byte;
+    rb->head++;
+    return true;
+}
+
+/* Take the oldest byte. Return false if the FIFO is empty. */
+bool rb_get(uart_rb_t *rb, uint8_t *out)
+{
+    if (rb->head == rb->tail) {
+        return false;
+    }
+    *out = rb->buf[rb->tail & RB_MASK];
+    rb->tail++;
+    return true;
+}
+
+/* Copy up to max bytes into dst in FIFO order; return how many. */
+size_t rb_read(uart_rb_t *rb, uint8_t *dst, size_t max)
+{
+    size_t n = 0u;
+    while (n < max && rb_get(rb, &dst[n])) {
+        n++;
+    }
+    return n;
+}
+`,
+  },
 };

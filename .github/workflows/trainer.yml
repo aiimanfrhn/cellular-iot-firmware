@@ -1,0 +1,45 @@
+# Builds the Embedded C Trainer and checks its content on every push and pull
+# request: the site build, the offline one-file build, and pnpm verify, which
+# compiles every starter and model solution with the real checker.
+name: Trainer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: trainer
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # corepack installs the exact pnpm version pinned in package.json.
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the site
+        run: pnpm build
+
+      - name: Build the offline one-file version
+        run: pnpm build:single
+
+      - name: Verify starters, solutions and quiz answers
+        run: pnpm verify

@@ -13,6 +13,7 @@ Each week has the same rhythm:
 
 - [ ] Study: *C and the compiler*, *Pointers and arrays*
 - [ ] Solve: bit operations, count bits and powers of two, register bit fields, reverse bits and swap bytes, highest set bit and next power of two, BCD for an RTC chip
+- [ ] Quiz: *Read the code*, to practise "what does this print?" questions
 - [ ] Be able to explain: `volatile`, integer promotion, why `1u << 31` is safe and `1 << 31` is not
 
 ## Week 2: Memory
@@ -42,6 +43,7 @@ Each week has the same rhythm:
 
 ## Week 6: Rehearse
 
+- [ ] Solve the six *Find the bug* problems: they copy the written-test format of planted bugs in working code.
 - [ ] Take a mock interview test at the start and the end of the week. Aim for 80% or more.
 - [ ] Study every topic the mock tests flag, and redo the problems you missed, timed.
 - [ ] Read the learning guide end to end: recite the *Remember* lists and explain the *Understand* items out loud.

@@ -75,7 +75,8 @@ A result only counts as a pass while it matches the current code and `CHECKER_VE
 
 - `pnpm build` copies the compiler's WebAssembly assets into `public/clang/` and builds the static site into `dist/`, ready for Vercel or any static host.
 - `pnpm build:single` inlines the app, styles and worker into one HTML file for offline study. Chrome refuses module workers from `blob:` URLs on `file://` pages, so the worker is bundled as a classic script. The ~28 MB compiler is too big to inline, so it loads from jsDelivr, pinned to the same version as `package.json`.
-- `pnpm verify` runs every model solution in `hints.js` through the real checker in Node, using the compiler package's Node build. It fails if any solution stops passing its problem's checks.
+- `pnpm verify` uses the real checker in Node, through the compiler package's Node build. It fails if a starter does not compile or already passes its checks, if a model solution in `hints.js` stops passing, or if a quiz question's `verify` program does not print exactly what its answer says.
+- GitHub Actions (`.github/workflows/trainer.yml`) runs `pnpm install --frozen-lockfile`, both builds and `pnpm verify` on every push to `main` and every pull request.
 
 ### Decisions
 

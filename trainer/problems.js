@@ -23,7 +23,7 @@ export const CHECKER_VERSION = 3;
 
 export const TOPICS = [
   'Bits and registers', 'Memory and pointers', 'Lists and strings', 'Data and protocols',
-  'Math and signal processing', 'Networking', 'Platform and hardware', 'State machines',
+  'Math and signal processing', 'Networking', 'Platform and hardware', 'State machines', 'Find the bug',
 ];
 
 export const PROBLEMS = [
@@ -2679,6 +2679,503 @@ static int trainer_run(const int32_t *temps, const char *want) {
       ['sensor failure forces HIGH', 'trainer_run((const int32_t[]){30000, TEMP_INVALID, TEMP_INVALID}, "OHH")'],
       ['recovers after a failure', 'trainer_run((const int32_t[]){TEMP_INVALID, 66000, 40000}, "HHO")'],
       ['very cold readings stay off', 'trainer_run((const int32_t[]){-40000, -1}, "OO")'],
+    ],
+  },
+
+  /* ========================================================== Find the bug */
+  {
+    id: 'bug_adc_macros', topic: 'Find the bug', title: 'ADC peak macros', summary: 'Two macros, two bugs',
+    difficulty: 'Easy', minutes: 10, filename: 'bug_adc_macros.c',
+    description: 'This ADC helper has 2 bugs. It samples a 12-bit channel n times, keeps the largest reading, removes the board\'s fixed offset and converts the result to millivolts with two function-like macros. A colleague says the reported peaks are sometimes too high and the conversion is wrong whenever an offset is applied. Find and fix both bugs.',
+    requirements: '<ul><li>Fix the bugs; keep the macro names and the function signature.</li><li><code>ADC_TO_MV(count)</code> converts any count expression to millivolts as <code>count * 3300 / 4095</code>, rounding down.</li><li><code>adc_peak_mv(n, offset_counts)</code> calls <code>adc_read</code> exactly <code>n</code> times (<code>n &gt;= 1</code>), takes the largest sample, subtracts <code>offset_counts</code> (never larger than a sample) and returns the result in millivolts.</li><li><code>adc_read</code> is provided by the checker; every call consumes a new sample.</li></ul>',
+    followups: [
+      '<code>ADC_TO_MV(4095u)</code> gives the right answer, so a quick test passes. Why does the missing parenthesis only show up when the argument is an expression, and which MISRA C rule (20.7) requires every macro parameter to be parenthesised?',
+      '<code>MAX(peak, adc_read())</code> looks like one call. Why is a side effect in a macro argument so easy to miss in review, and why does MISRA Directive 4.9 prefer a <code>static inline</code> function over a function-like macro?',
+      'How would you write a type-generic <code>MAX</code> that evaluates each argument once, and what does that cost in portability?',
+    ],
+    starter: C`
+#include <stdint.h>
+
+#define ADC_FULL_SCALE_MV  3300u
+#define ADC_MAX_COUNT      4095u
+
+/* Convert a 12-bit ADC count to millivolts, rounding down. */
+#define ADC_TO_MV(count)   (count * ADC_FULL_SCALE_MV / ADC_MAX_COUNT)
+
+/* The larger of two values. */
+#define MAX(a, b)          ((a) > (b) ? (a) : (b))
+
+/* Provided by the HAL: start a conversion, wait for it and return the
+   12-bit result. Every call consumes one new sample. */
+uint16_t adc_read(void);
+
+/* Take n samples (n >= 1) and return the largest one in millivolts, after
+   subtracting the board's fixed offset. offset_counts is never larger
+   than a sample. */
+uint32_t adc_peak_mv(unsigned n, uint16_t offset_counts)
+{
+    uint16_t peak = 0u;
+
+    for (unsigned i = 0u; i < n; i++) {
+        peak = MAX(peak, adc_read());
+    }
+    return ADC_TO_MV(peak - offset_counts);
+}
+`,
+    prelude: C`
+static uint16_t trainer_samples[8];
+static unsigned trainer_count, trainer_next, trainer_reads;
+/* Fake ADC: returns the queued samples, then full scale if read too often. */
+uint16_t adc_read(void) {
+    uint16_t s = trainer_next < trainer_count ? trainer_samples[trainer_next] : 4095u;
+    trainer_next++;
+    trainer_reads++;
+    return s;
+}
+static uint32_t trainer_run(const uint16_t *s, unsigned n, uint16_t offset) {
+    trainer_count = n; trainer_next = 0u; trainer_reads = 0u;
+    for (unsigned i = 0u; i < n; i++) trainer_samples[i] = s[i];
+    return adc_peak_mv(n, offset);
+}
+static int trainer_peak(const uint16_t *s, unsigned n, uint16_t offset, uint32_t want) {
+    return trainer_run(s, n, offset) == want;
+}
+static unsigned trainer_reads_for(const uint16_t *s, unsigned n) {
+    (void)trainer_run(s, n, 0u);
+    return trainer_reads;
+}
+`,
+    checks: [
+      ['full-scale count is 3300 mV', 'ADC_TO_MV(4095u) == 3300u'],
+      ['zero count is 0 mV', 'ADC_TO_MV(0u) == 0u'],
+      ['converts a count given as a sum', 'ADC_TO_MV(4000u + 95u) == 3300u'],
+      ['converts a count given as a difference', 'ADC_TO_MV(4095u - 95u) == 3223u'],
+      ['peak of a single sample', 'trainer_peak((const uint16_t[]){2048u}, 1u, 0u, 1650u)'],
+      ['peak of rising samples', 'trainer_peak((const uint16_t[]){100u, 200u, 300u, 400u}, 4u, 0u, 322u)'],
+      ['peak in the middle of the samples', 'trainer_peak((const uint16_t[]){100u, 900u, 200u}, 3u, 0u, 725u)'],
+      ['peak of equal samples', 'trainer_peak((const uint16_t[]){500u, 500u, 500u}, 3u, 0u, 402u)'],
+      ['subtracts the offset before converting', 'trainer_peak((const uint16_t[]){1000u, 2095u}, 2u, 95u, 1611u)'],
+      ['takes exactly n samples', 'trainer_reads_for((const uint16_t[]){100u, 900u, 200u}, 3u) == 3u'],
+      ['takes one sample when n is 1', 'trainer_reads_for((const uint16_t[]){7u}, 1u) == 1u'],
+    ],
+  },
+  {
+    id: 'bug_hex_checksum', topic: 'Find the bug', title: 'Frame checksum as hex', summary: 'Sum the bytes, print four digits',
+    difficulty: 'Easy', minutes: 10, filename: 'bug_hex_checksum.c',
+    description: 'This framing helper has 2 bugs. A modem link appends a 16-bit additive checksum to each frame as four uppercase hex digits. The code works in the lab with plain AT commands, but the far end rejects frames that carry binary data, and the text after the checksum is sometimes garbage. Find and fix both bugs.',
+    requirements: '<ul><li>Fix the bugs; keep the function signatures.</li><li><code>frame_sum16</code> returns the sum of the first <code>len</code> bytes of <code>frame</code>, each taken as an unsigned value 0 to 255, modulo 65536.</li><li><code>sum16_to_hex</code> writes exactly four uppercase hex digits followed by a NUL into <code>out</code> (at least 5 bytes): 0x01AF becomes <code>"01AF"</code>.</li><li><code>frame_append_sum</code> writes the checksum text at <code>frame + len</code> and returns <code>len + 4</code>; the result is a NUL-terminated string.</li></ul>',
+    followups: [
+      'Every test frame made of printable ASCII passes. Why does the signedness of plain <code>char</code> only matter for bytes 0x80 and above, and why is it different on an ARM compiler where <code>char</code> is often unsigned?',
+      'Which warning (<code>-Wconversion</code> or <code>-Wsign-conversion</code>) or MISRA essential-type rule (10.3, 10.4) would flag <code>sum += frame[i]</code>, and why do teams that use them store raw bytes as <code>uint8_t</code>?',
+      'The missing NUL went unnoticed because the buffer happened to contain zeros. How would you write a test that catches it every time, and what does a static analyser look for?',
+    ],
+    starter: C`
+#include <stddef.h>
+#include <stdint.h>
+
+static const char hex_digits[] = "0123456789ABCDEF";
+
+/* 16-bit additive checksum: the sum of every byte of the frame, each byte
+   taken as an unsigned value 0..255, modulo 65536. */
+uint16_t frame_sum16(const char *frame, size_t len)
+{
+    uint16_t sum = 0u;
+
+    for (size_t i = 0u; i < len; i++) {
+        sum += frame[i];
+    }
+    return sum;
+}
+
+/* Write sum as exactly four uppercase hex digits followed by a NUL, so out
+   must hold at least 5 bytes. 0x01AF becomes "01AF". */
+void sum16_to_hex(uint16_t sum, char *out)
+{
+    for (int i = 0; i < 4; i++) {
+        out[i] = hex_digits[(sum >> (12 - 4 * i)) & 0xFu];
+    }
+}
+
+/* Append the checksum of frame[0..len) as hex text at frame + len. The
+   caller guarantees room for 5 more bytes. Return the new length. */
+size_t frame_append_sum(char *frame, size_t len)
+{
+    sum16_to_hex(frame_sum16(frame, len), frame + len);
+    return len + 4u;
+}
+`,
+    prelude: C`
+static const char trainer_high[] = "\x80\xFF\x01";
+static uint16_t trainer_sum_ff(size_t n) {
+    static char bytes[300];
+    memset(bytes, 0xFF, sizeof bytes);
+    return frame_sum16(bytes, n);
+}
+/* Format into a buffer full of '#' and compare all 5 bytes, NUL included. */
+static int trainer_hex(uint16_t sum, const char *want) {
+    char buf[8];
+    memset(buf, '#', sizeof buf);
+    sum16_to_hex(sum, buf);
+    return memcmp(buf, want, 5u) == 0;
+}
+static int trainer_append(void) {
+    char frame[16];
+    memset(frame, '#', sizeof frame);
+    memcpy(frame, "AT\x80", 3u);
+    if (frame_append_sum(frame, 3u) != 7u) return 0;
+    return memcmp(frame, "AT\x80" "0115", 8u) == 0;
+}
+`,
+    checks: [
+      ['checksum of an empty frame is 0', 'frame_sum16("", 0u) == 0u'],
+      ['checksum of ASCII text', 'frame_sum16("AT", 2u) == 0x95u'],
+      ['reads only len bytes', 'frame_sum16("ATZ", 2u) == 0x95u'],
+      ['byte 0x80 adds 128', 'frame_sum16(trainer_high, 1u) == 0x80u'],
+      ['bytes 0x80, 0xFF and 0x01 add 384', 'frame_sum16(trainer_high, 3u) == 0x180u'],
+      ['sum wraps modulo 65536', 'trainer_sum_ff(257u) == 0xFFFFu && trainer_sum_ff(258u) == 0x00FEu'],
+      ['0x01AF formats as 01AF', 'trainer_hex(0x01AFu, "01AF")'],
+      ['leading zeros are kept', 'trainer_hex(0x000Au, "000A")'],
+      ['0xFFFF formats as FFFF', 'trainer_hex(0xFFFFu, "FFFF")'],
+      ['append writes a terminated checksum and returns the new length', 'trainer_append()'],
+    ],
+  },
+  {
+    id: 'bug_be_counters', topic: 'Find the bug', title: 'Modem counters report', summary: 'Big-endian parse, two bugs',
+    difficulty: 'Medium', minutes: 15, filename: 'bug_be_counters.c',
+    description: 'This protocol parser has 2 bugs. The modem sends a counters report as one count byte N followed by N big-endian 32-bit counters. It passed bring-up with small counters, but in the field it crashes once a counter passes 2^31, and the caller\'s array gets corrupted. Find and fix both bugs.',
+    requirements: '<ul><li>Fix the bugs; keep the function signatures.</li><li><code>be32_read</code> returns the big-endian 32-bit value at <code>p</code> for any byte values, without undefined behaviour.</li><li><code>parse_counters</code> returns -1 if <code>len</code> is 0 or too short to hold all N counters. Otherwise it copies the first <code>min(N, max)</code> counters into <code>out</code>, returns how many it copied, and writes nothing else to <code>out</code>.</li></ul>',
+    followups: [
+      '<code>p[0]</code> is a <code>uint8_t</code>, yet <code>p[0] &lt;&lt; 24</code> is a signed shift. Explain integer promotion, and why every test with bytes below 0x80 passes.',
+      'The loop writes one element too many only when the caller\'s array is exactly <code>max</code> long. Why do off-by-one writes often survive testing, and which tools (AddressSanitizer, MISRA Rule 18.1, a guard value after the array) catch them?',
+      'The length check computes <code>1 + 4 * n</code>. Why can it not overflow here, and how would you write it if <code>n</code> came from a 32-bit field?',
+    ],
+    starter: C`
+#include <stddef.h>
+#include <stdint.h>
+
+/* Read a big-endian (network order) 32-bit value from p. */
+uint32_t be32_read(const uint8_t *p)
+{
+    return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+}
+
+/* A counters report is one count byte N followed by N big-endian 32-bit
+   counters. Copy the first min(N, max) counters into out and return how
+   many were copied. Return -1 if len is too short to hold all N. */
+int parse_counters(const uint8_t *frame, size_t len, uint32_t *out, size_t max)
+{
+    if (len < 1u) {
+        return -1;
+    }
+    size_t n = frame[0];
+    if (len < 1u + 4u * n) {
+        return -1;
+    }
+    if (n > max) {
+        n = max;
+    }
+    for (size_t i = 0u; i <= n; i++) {
+        out[i] = be32_read(&frame[1u + 4u * i]);
+    }
+    return (int)n;
+}
+`,
+    prelude: C`
+#define TRAINER_GUARD 0xA5A5A5A5u
+/* Two counters, then padding so a parser that reads too far stays in bounds. */
+static const uint8_t trainer_small[] = { 2u, 0x00, 0x00, 0x01, 0x00, 0x12, 0x34, 0x56, 0x78,
+                                         0x11, 0x11, 0x11, 0x11, 0x22, 0x22, 0x22, 0x22 };
+static const uint32_t trainer_small_want[] = { 0x00000100u, 0x12345678u };
+static const uint8_t trainer_big[] = { 3u, 0x80, 0x00, 0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF,
+                                       0xC0, 0xA8, 0x01, 0x01, 0x33, 0x33, 0x33, 0x33 };
+static const uint32_t trainer_big_want[] = { 0x80000001u, 0xFFFFFFFFu, 0xC0A80101u };
+static const uint8_t trainer_none[] = { 0u, 0x44, 0x44, 0x44, 0x44 };
+/* Parse into a guarded array and check the return value, the counters
+   copied, and that nothing past them was written. */
+static int trainer_parse(const uint8_t *frame, size_t len, size_t max, int want, const uint32_t *values) {
+    uint32_t out[6];
+    for (int i = 0; i < 6; i++) out[i] = TRAINER_GUARD;
+    int got = parse_counters(frame, len, out, max);
+    if (got != want) return 0;
+    int copied = want < 0 ? 0 : want;
+    for (int i = 0; i < copied; i++) if (out[i] != values[i]) return 0;
+    for (int i = copied; i < 6; i++) if (out[i] != TRAINER_GUARD) return 0;
+    return 1;
+}
+`,
+    checks: [
+      ['reads a small value', 'be32_read((const uint8_t[]){0x00, 0x00, 0x01, 0x00}) == 0x100u'],
+      ['reads bytes in network order', 'be32_read((const uint8_t[]){0x12, 0x34, 0x56, 0x78}) == 0x12345678u'],
+      ['reads a value with the top bit set', 'be32_read((const uint8_t[]){0x80, 0x00, 0x00, 0x01}) == 0x80000001u'],
+      ['reads 0xFFFFFFFF', 'be32_read((const uint8_t[]){0xFF, 0xFF, 0xFF, 0xFF}) == 0xFFFFFFFFu'],
+      ['parses a two-counter report', 'trainer_parse(trainer_small, 9u, 4u, 2, trainer_small_want)'],
+      ['copies only max counters', 'trainer_parse(trainer_small, 9u, 1u, 1, trainer_small_want)'],
+      ['max of zero copies nothing', 'trainer_parse(trainer_small, 9u, 0u, 0, trainer_small_want)'],
+      ['report with zero counters', 'trainer_parse(trainer_none, 1u, 4u, 0, trainer_small_want)'],
+      ['rejects a truncated report', 'trainer_parse(trainer_small, 8u, 4u, -1, trainer_small_want)'],
+      ['rejects an empty frame', 'trainer_parse(trainer_small, 0u, 4u, -1, trainer_small_want)'],
+      ['parses large counters', 'trainer_parse(trainer_big, 13u, 3u, 3, trainer_big_want)'],
+    ],
+  },
+  {
+    id: 'bug_tick_timeout', topic: 'Find the bug', title: 'Tick timeouts', summary: 'Timeouts that survive 48 days',
+    difficulty: 'Medium', minutes: 15, filename: 'bug_tick_timeout.c',
+    description: 'This timeout module has 2 bugs. It runs on a 1024 Hz RTC tick held in a free-running uint32_t that wraps to 0 about every 48.5 days. Field reports say short timeouts fire immediately or late, and a device that has been up for seven weeks sometimes times out every operation at once. Find and fix both bugs.',
+    requirements: '<ul><li>Fix the bugs; keep the function signatures.</li><li><code>ms_to_ticks</code> returns <code>ms * 1024 / 1000</code> rounded down, for any <code>ms</code> up to 3,600,000 (one hour).</li><li><code>deadline_after</code> returns <code>now</code> plus the timeout in ticks, wrapping like the counter.</li><li><code>tick_expired</code> returns true once <code>now</code> has reached or passed <code>deadline</code>, including when the counter wrapped between them. Timeouts are always shorter than 2^31 ticks.</li></ul>',
+    followups: [
+      'Every test with a whole number of seconds passed. Why does dividing first lose precision, and when does multiplying first overflow (and how does a 64-bit intermediate fix that)?',
+      'Why does <code>now &gt;= deadline</code> work for 48 days and then fail? Explain why <code>now - deadline</code> computed in unsigned arithmetic still gives the right answer across the wrap.',
+      'How would you test wraparound without waiting 48 days? Many RTOSes start the tick counter just below the wrap at boot for exactly this reason.',
+    ],
+    starter: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+#define TICK_HZ 1024u   /* the RTC tick interrupt runs at 1024 Hz */
+
+/* Convert milliseconds to ticks, rounding down. ms is at most 3600000
+   (one hour). */
+uint32_t ms_to_ticks(uint32_t ms)
+{
+    return ms / 1000u * TICK_HZ;
+}
+
+/* The tick counter is a free-running uint32_t that wraps to 0 about every
+   48.5 days. Return the tick at which a timeout of ms starting at now
+   expires. */
+uint32_t deadline_after(uint32_t now, uint32_t ms)
+{
+    return now + ms_to_ticks(ms);
+}
+
+/* Return true once now has reached or passed deadline. This must keep
+   working when the counter wraps between the start and the deadline;
+   timeouts are always shorter than 2^31 ticks. */
+bool tick_expired(uint32_t now, uint32_t deadline)
+{
+    return now >= deadline;
+}
+`,
+    prelude: C`
+`,
+    checks: [
+      ['one second is 1024 ticks', 'ms_to_ticks(1000u) == 1024u'],
+      ['zero ms is zero ticks', 'ms_to_ticks(0u) == 0u'],
+      ['1500 ms is 1536 ticks', 'ms_to_ticks(1500u) == 1536u'],
+      ['short timeouts are not rounded to zero', 'ms_to_ticks(10u) == 10u && ms_to_ticks(999u) == 1022u'],
+      ['one hour converts exactly', 'ms_to_ticks(3600000u) == 3686400u'],
+      ['deadline is now plus the timeout', 'deadline_after(100u, 250u) == 356u'],
+      ['deadline wraps past zero', 'deadline_after(0xFFFFFF00u, 1000u) == 0x300u'],
+      ['not expired before the deadline', '!tick_expired(1000u, 2000u)'],
+      ['expired exactly at the deadline', 'tick_expired(2000u, 2000u)'],
+      ['expired after the deadline', 'tick_expired(2001u, 2000u)'],
+      ['not expired just before a deadline past the wrap', '!tick_expired(0xFFFFFFF0u, 0x10u)'],
+      ['expired after the counter wraps', 'tick_expired(0x20u, 0xFFFFFFF0u)'],
+    ],
+  },
+  {
+    id: 'bug_encoder_fuse', topic: 'Find the bug', title: 'Dual encoder fusion', summary: 'Status field and midpoint',
+    difficulty: 'Medium', minutes: 15, filename: 'bug_encoder_fuse.c',
+    description: 'This sensor-fusion helper has 2 bugs. A motor controller reads two redundant 32-bit position encoders plus a status byte, and reports their midpoint when both are valid. Readings are rejected even when the status byte says the signal is good, and positions near the top of the 32-bit range come out near zero. Find and fix both bugs.',
+    requirements: '<ul><li>Fix the bugs; keep the function signatures and macros.</li><li><code>status_quality</code> returns bits 7 to 4 of the status byte as a number 0 to 15.</li><li><code>midpoint_u32</code> returns the midpoint of <code>a</code> and <code>b</code> rounded down, for any two <code>uint32_t</code> values.</li><li><code>encoder_fuse</code> returns false if quality is below 4 or neither reading is valid; otherwise it stores the midpoint (both valid) or the one valid reading in <code>*pos</code> and returns true.</li></ul>',
+    followups: [
+      '<code>status &amp; ST_QUALITY_MASK &gt;&gt; ST_QUALITY_SHIFT</code> reads naturally left to right. Which operator binds tighter, and why does MISRA C Rule 12.1 ask for explicit parentheses?',
+      '<code>(a + b) / 2</code> is the same bug that sat in the JDK binary search for nine years. Why do unit tests with small numbers never find it, and what does CERT INT30-C say about unsigned wraparound?',
+      'Give two ways to compute an overflow-free midpoint, and say which one still works if <code>a &gt; b</code>.',
+    ],
+    starter: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+/* Status byte from the dual encoder front end:
+   bit 0      encoder A reading valid
+   bit 1      encoder B reading valid
+   bits 7..4  signal quality, 0 (worst) to 15 (best) */
+#define ST_A_VALID        0x01u
+#define ST_B_VALID        0x02u
+#define ST_QUALITY_MASK   0xF0u
+#define ST_QUALITY_SHIFT  4u
+#define MIN_QUALITY       4u
+
+/* Return the 4-bit signal quality field. */
+unsigned status_quality(uint8_t status)
+{
+    return status & ST_QUALITY_MASK >> ST_QUALITY_SHIFT;
+}
+
+/* Midpoint of two positions, rounded down. Positions use the full
+   uint32_t range. */
+uint32_t midpoint_u32(uint32_t a, uint32_t b)
+{
+    return (a + b) / 2u;
+}
+
+/* Fuse the two encoder positions into *pos. Return false if the quality
+   is below MIN_QUALITY or neither reading is valid. */
+bool encoder_fuse(uint32_t a, uint32_t b, uint8_t status, uint32_t *pos)
+{
+    bool a_ok = (status & ST_A_VALID) != 0u;
+    bool b_ok = (status & ST_B_VALID) != 0u;
+
+    if (status_quality(status) < MIN_QUALITY || (!a_ok && !b_ok)) {
+        return false;
+    }
+    *pos = (a_ok && b_ok) ? midpoint_u32(a, b) : (a_ok ? a : b);
+    return true;
+}
+`,
+    prelude: C`
+static int trainer_fuse(uint8_t status, uint32_t a, uint32_t b, bool want_ok, uint32_t want) {
+    uint32_t pos = 0x5A5A5A5Au;
+    bool ok = encoder_fuse(a, b, status, &pos);
+    if (ok != want_ok) return 0;
+    return ok ? pos == want : pos == 0x5A5A5A5Au;
+}
+`,
+    checks: [
+      ['quality field of 0xA3 is 10', 'status_quality(0xA3u) == 10u'],
+      ['quality ignores the valid bits', 'status_quality(0x03u) == 0u'],
+      ['quality 15', 'status_quality(0xF0u) == 15u'],
+      ['midpoint of small values', 'midpoint_u32(10u, 20u) == 15u'],
+      ['midpoint rounds down', 'midpoint_u32(3u, 4u) == 3u && midpoint_u32(4u, 3u) == 3u'],
+      ['midpoint near the top of the range', 'midpoint_u32(0xFFFFFFFEu, 0xFFFFFFFCu) == 0xFFFFFFFDu'],
+      ['midpoint of the two largest values', 'midpoint_u32(UINT32_MAX, UINT32_MAX - 1u) == 0xFFFFFFFEu'],
+      ['midpoint across the halfway point', 'midpoint_u32(0x80000000u, 0x80000002u) == 0x80000001u'],
+      ['fuses two valid readings', 'trainer_fuse(0xF3u, 100u, 200u, true, 150u)'],
+      ['uses the only valid reading', 'trainer_fuse(0x82u, 100u, 200u, true, 200u)'],
+      ['rejects low quality', 'trainer_fuse(0x33u, 100u, 200u, false, 0u)'],
+      ['rejects when neither reading is valid', 'trainer_fuse(0xF0u, 100u, 200u, false, 0u)'],
+      ['fuses large positions', 'trainer_fuse(0x43u, 0xFFFFFF00u, 0xFFFFFF10u, true, 0xFFFFFF08u)'],
+    ],
+  },
+  {
+    id: 'bug_uart_ring', topic: 'Find the bug', title: 'UART receive FIFO', summary: 'Free-running indices, three bugs',
+    difficulty: 'Hard', minutes: 20, filename: 'bug_uart_ring.c',
+    description: 'This UART receive FIFO has 3 bugs. The RX interrupt calls rb_put for each byte and the main loop drains the FIFO with rb_get or rb_read. head and tail are free-running 8-bit counters masked into an 8-byte array. The first byte read back is wrong, a burst of 9 bytes silently loses data, and after a few bytes of traffic the board faults. Find and fix all three bugs.',
+    requirements: '<ul><li>Fix the bugs; keep the structure, macros and function signatures.</li><li><code>rb_count</code> returns the number of bytes stored, 0 to <code>RB_SIZE</code>, including after the counters wrap at 256.</li><li><code>rb_put</code> stores a byte and returns true, or returns false and changes nothing when <code>RB_SIZE</code> bytes are already stored.</li><li><code>rb_get</code> removes the oldest byte, or returns false when empty. <code>rb_read</code> copies up to <code>max</code> bytes in FIFO order and returns how many.</li><li>Every array access stays inside <code>buf</code>.</li></ul>',
+    followups: [
+      'The ISR stores the byte and then advances <code>head</code>. Why must it happen in that order once the main loop reads concurrently, and what else (<code>volatile</code>, a memory barrier on a multi-core part) does a real driver need?',
+      'Why does the missing mask only fault after a few bytes, and which tools would have caught the out-of-bounds index first: <code>-fsanitize=array-bounds</code>, MISRA Rule 18.1, or a bounded index type?',
+      'Why does an 8-bit free-running counter work only when <code>RB_SIZE</code> divides 256, and why does <code>rb_count</code> need the cast back to <code>uint8_t</code>?',
+    ],
+    starter: C`
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define RB_SIZE 8u                  /* a power of two that divides 256 */
+#define RB_MASK (RB_SIZE - 1u)
+
+/* head and tail are free-running counters that wrap at 256. The ISR
+   stores a byte and then advances head; the main loop takes a byte and
+   then advances tail. Index the array with counter & RB_MASK. */
+typedef struct {
+    uint8_t buf[RB_SIZE];
+    uint8_t head;
+    uint8_t tail;
+} uart_rb_t;
+
+void rb_init(uart_rb_t *rb) { rb->head = 0u; rb->tail = 0u; }
+
+/* Number of bytes stored, 0..RB_SIZE. */
+size_t rb_count(const uart_rb_t *rb) { return (uint8_t)(rb->head - rb->tail); }
+
+/* Called from the RX interrupt. Return false and drop the byte if full. */
+bool rb_put(uart_rb_t *rb, uint8_t byte)
+{
+    if (rb_count(rb) > RB_SIZE) {
+        return false;
+    }
+    rb->buf[++rb->head & RB_MASK] = byte;
+    return true;
+}
+
+/* Take the oldest byte. Return false if the FIFO is empty. */
+bool rb_get(uart_rb_t *rb, uint8_t *out)
+{
+    if (rb->head == rb->tail) {
+        return false;
+    }
+    *out = rb->buf[rb->tail];
+    rb->tail++;
+    return true;
+}
+
+/* Copy up to max bytes into dst in FIFO order; return how many. */
+size_t rb_read(uart_rb_t *rb, uint8_t *dst, size_t max)
+{
+    size_t n = 0u;
+    while (n < max && rb_get(rb, &dst[n])) {
+        n++;
+    }
+    return n;
+}
+`,
+    prelude: C`
+static int trainer_empty(void) {
+    uart_rb_t rb; uint8_t o = 0u;
+    memset(&rb, 0x5A, sizeof rb);
+    rb_init(&rb);
+    return rb_count(&rb) == 0u && !rb_get(&rb, &o);
+}
+static int trainer_fifo(void) {
+    uart_rb_t rb; uint8_t o = 0u;
+    memset(&rb, 0, sizeof rb);
+    rb_init(&rb);
+    if (!rb_put(&rb, 11u) || !rb_put(&rb, 22u) || !rb_put(&rb, 33u)) return 0;
+    if (!rb_get(&rb, &o) || o != 11u) return 0;
+    if (!rb_get(&rb, &o) || o != 22u) return 0;
+    if (!rb_get(&rb, &o) || o != 33u) return 0;
+    return !rb_get(&rb, &o);
+}
+static int trainer_count(void) {
+    uart_rb_t rb; uint8_t o = 0u;
+    rb_init(&rb);
+    (void)rb_put(&rb, 1u); (void)rb_put(&rb, 2u); (void)rb_put(&rb, 3u);
+    if (rb_count(&rb) != 3u) return 0;
+    (void)rb_get(&rb, &o);
+    return rb_count(&rb) == 2u;
+}
+/* Advance both counters by start, then fill the FIFO and check that the
+   extra byte is refused and the stored bytes come back intact. */
+static int trainer_full(unsigned start) {
+    uart_rb_t rb; uint8_t o = 0u;
+    rb_init(&rb);
+    for (unsigned i = 0u; i < start; i++) { (void)rb_put(&rb, 0u); (void)rb_get(&rb, &o); }
+    for (unsigned i = 0u; i < RB_SIZE; i++) if (!rb_put(&rb, (uint8_t)(10u + i))) return 0;
+    if (rb_put(&rb, 99u) || rb_count(&rb) != RB_SIZE) return 0;
+    for (unsigned i = 0u; i < RB_SIZE; i++) if (!rb_get(&rb, &o) || o != 10u + i) return 0;
+    return !rb_get(&rb, &o);
+}
+/* Stream 600 bytes: put three, take two, drain when full. */
+static int trainer_stream(void) {
+    uart_rb_t rb; uint8_t o = 0u, next_in = 0u, next_out = 0u;
+    rb_init(&rb);
+    for (int step = 0; step < 200; step++) {
+        for (int k = 0; k < 3; k++) if (rb_put(&rb, next_in)) next_in++;
+        for (int k = 0; k < 2; k++) { if (!rb_get(&rb, &o) || o != next_out) return 0; next_out++; }
+        if (rb_count(&rb) == RB_SIZE) while (rb_get(&rb, &o)) { if (o != next_out) return 0; next_out++; }
+    }
+    return 1;
+}
+static int trainer_read(void) {
+    uart_rb_t rb; uint8_t dst[8] = {0};
+    rb_init(&rb);
+    for (uint8_t v = 1u; v <= 5u; v++) (void)rb_put(&rb, v);
+    if (rb_read(&rb, dst, 3u) != 3u || dst[0] != 1u || dst[1] != 2u || dst[2] != 3u) return 0;
+    if (rb_read(&rb, dst, 8u) != 2u || dst[0] != 4u || dst[1] != 5u) return 0;
+    return rb_read(&rb, dst, 8u) == 0u;
+}
+`,
+    checks: [
+      ['a new FIFO is empty', 'trainer_empty()'],
+      ['bytes come back in FIFO order', 'trainer_fifo()'],
+      ['count tracks puts and gets', 'trainer_count()'],
+      ['a full FIFO refuses the ninth byte', 'trainer_full(0u)'],
+      ['a full FIFO keeps its bytes after the indices move', 'trainer_full(5u)'],
+      ['a full FIFO works when the counters wrap at 256', 'trainer_full(252u)'],
+      ['a long stream keeps its order', 'trainer_stream()'],
+      ['rb_read copies in order and stops when empty', 'trainer_read()'],
     ],
   },
 ];

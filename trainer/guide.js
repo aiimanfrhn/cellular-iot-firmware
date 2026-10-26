@@ -553,4 +553,73 @@ uint16_t ethertype = get_be16(frame + 12);</code></pre>
       'Know the numbers: 14-byte Ethernet header, 4-byte VLAN tag, 20-byte IPv4 header, 8-byte UDP header, 1500 MTU.',
     ],
   },
+
+  /* ========================================================= Read the code */
+  read_code: {
+    intro: 'Written embedded interviews often show a short C snippet and ask "What does this print?" or "What is wrong with this code?". The snippets are chosen so the obvious answer is wrong. Slow down, write down the type of every sub-expression, and apply the rules of the language, not your intuition.',
+    sections: [
+      {
+        title: 'A method: trace by hand, write down types, check widths',
+        body: `<ol>
+<li><b>Note the target.</b> How wide are <code>int</code>, <code>long</code> and pointers? On a 32-bit Cortex-M they are all 32 bits. If the question does not say, state your assumption.</li>
+<li><b>Write the type next to each sub-expression.</b> <code>uint8_t + uint8_t</code> is <code>int</code>; <code>int</code> compared with <code>size_t</code> is <code>size_t</code>.</li>
+<li><b>Check widths at every store.</b> A value only wraps or truncates when it is converted into a narrower type: an assignment, a cast, or a parameter.</li>
+<li><b>Trace like a debugger.</b> Keep a little table of each variable's value after every statement, especially with <code>i++</code>, <code>static</code> locals and macros.</li>
+<li><b>Ask "is this even defined?"</b> before computing an answer. Signed overflow, shifting into the sign bit and two unsequenced writes to one variable are undefined; say so.</li>
+</ol>`,
+      },
+      {
+        title: 'Integer promotion and the usual arithmetic conversions',
+        body: `<p>Before any arithmetic, operands narrower than <code>int</code> (<code>uint8_t</code>, <code>uint16_t</code>, <code>char</code>, <code>short</code>) are promoted to <code>int</code>. Then, if the two operands still differ, the "smaller" one is converted to the other's type; if one is unsigned and at least as wide, the signed one becomes unsigned.</p>
+<pre><code>uint8_t a = 200, b = 100;
+a + b          // int 300, not 44
+uint8_t m = 0x0F;
+~m             // int 0xFFFFFFF0, not 0xF0
+uint16_t d = 100 - 200;   // 65436: wraps only on the store</code></pre>
+<p>Unsigned arithmetic wraps modulo 2<sup>N</sup> and is well defined. Signed overflow is undefined behaviour. Integer division truncates toward zero, and <code>%</code> takes the sign of the left operand: <code>-7 / 2 == -3</code>, <code>-7 % 2 == -1</code>.</p>`,
+      },
+      {
+        title: 'Signed and unsigned comparisons',
+        body: `<p>When <code>int</code> meets <code>unsigned int</code> or <code>size_t</code>, the <code>int</code> is converted to unsigned, so -1 becomes 4294967295:</p>
+<pre><code>if (-1 &gt; sizeof(int))   // true: sizeof is an unsigned size_t
+int i = -1; unsigned u = 1;
+if (i &lt; u)              // false</code></pre>
+<p>The same trap appears in loops: <code>for (unsigned i = n - 1; i &gt;= 0; i--)</code> never ends, because an unsigned value is always &gt;= 0. Build with <code>-Wsign-compare</code> (part of <code>-Wextra</code>).</p>`,
+      },
+      {
+        title: 'sizeof, arrays and strings',
+        body: `<ul>
+<li><code>sizeof</code> on an array in the scope where it is declared gives the whole array: <code>char s[] = "UART"</code> has <code>sizeof</code> 5, because the literal includes the <code>'\\0'</code>. <code>strlen(s)</code> is 4.</li>
+<li>On a pointer, or on an array parameter (which is really a pointer), <code>sizeof</code> gives the pointer size, 4 on a 32-bit MCU.</li>
+<li>A struct's size includes padding: each member sits at a multiple of its alignment, and the total is rounded up to the largest alignment. Compute offsets one member at a time.</li>
+</ul>`,
+      },
+      {
+        title: 'Macros and precedence',
+        body: `<p>Macros substitute text before the compiler sees it. Expand them on paper first:</p>
+<pre><code>#define SQUARE(x) x * x
+SQUARE(1 + 2)          // 1 + 2 * 1 + 2 == 5, not 9
+#define MAX(a, b) ((a) &gt; (b) ? (a) : (b))
+MAX(i++, j)            // i++ may run twice</code></pre>
+<p>Precedence traps worth memorising: <code>==</code> and <code>!=</code> bind tighter than <code>&amp;</code>, <code>^</code> and <code>|</code>, so <code>x &amp; MASK == MASK</code> means <code>x &amp; (MASK == MASK)</code>. <code>+</code> and <code>-</code> bind tighter than <code>&lt;&lt;</code>, so <code>1 &lt;&lt; 2 + 3</code> is <code>1 &lt;&lt; 5</code>. When in doubt, the answer is "add parentheses".</p>`,
+      },
+      {
+        title: '"What is wrong with this code?"',
+        body: `<p>Scan for the usual embedded suspects, in roughly this order:</p>
+<ul>
+<li>A variable shared with an ISR that is not <code>volatile</code>, or a read-modify-write on it (<code>count++</code>, <code>flags |= x</code>) without a critical section.</li>
+<li>A pointer to a local returned or stored beyond the function's lifetime.</li>
+<li>Unbounded copies (<code>strcpy</code>, <code>sprintf</code>, <code>memcpy</code> with an external length) into fixed buffers.</li>
+<li><code>malloc</code>, <code>printf</code> or blocking calls inside an ISR.</li>
+<li>Signed shifts, missing <code>u</code> suffixes, and casts that hide truncation.</li>
+</ul>`,
+      },
+    ],
+    tips: [
+      'Read the snippet aloud and name the rule you are applying: "both operands are promoted to int", "the usual arithmetic conversions make -1 unsigned".',
+      'State your assumptions about the target (int is 32 bits, char signedness, endianness) before you answer.',
+      'If the code is undefined behaviour, say so instead of guessing an output, then say how you would fix it.',
+      'Mention that -Wall -Wextra -Werror would have flagged most of these snippets.',
+    ],
+  },
 };

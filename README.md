@@ -1,5 +1,7 @@
 # Embedded C Interview Prep
 
+[![Trainer](https://github.com/aiimanfrhn/cellular-iot-firmware/actions/workflows/trainer.yml/badge.svg)](https://github.com/aiimanfrhn/cellular-iot-firmware/actions/workflows/trainer.yml)
+
 Preparation for embedded and firmware software engineering interviews, aimed at roles in Singapore's automotive, semiconductor, consumer-electronics and industrial companies. The centre of the repository is the **Embedded C Trainer**: a practice site that runs in the browser, where a real C compiler checks your answers to classic embedded interview problems.
 
 The project started as a 12-week cellular IoT firmware portfolio plan. Interview preparation became the main goal, with a six-week [interview prep plan](docs/interview-prep-plan.md); the hands-on firmware plan is kept for later (see [Hands-on firmware project](#hands-on-firmware-project)).
@@ -8,10 +10,10 @@ The project started as a 12-week cellular IoT firmware portfolio plan. Interview
 
 The trainer lives in [`trainer/`](trainer/). Everything runs in the browser: clang compiled to WebAssembly builds and runs your code, so there is nothing to install and your code is not uploaded.
 
-- **36 coding problems** in eight topics: bits and registers, memory and pointers, lists and strings, data and protocols, math and signal processing, networking, platform and hardware, and state machines (11 easy, 21 medium, 4 hard). Each problem has a target time, the follow-up questions interviewers ask next, three graded hints and a model solution.
+- **42 coding problems** in nine topics: bits and registers, memory and pointers, lists and strings, data and protocols, math and signal processing, networking, platform and hardware, state machines, and find the bug, where the starter code has planted bugs to fix (13 easy, 24 medium, 5 hard). Each problem has a target time, the follow-up questions interviewers ask next, three graded hints and a model solution.
 - **Strict checking**: C11 with warnings as errors and undefined-behaviour traps, so a shift by 32 or a signed overflow fails instead of silently working. Compiler errors are marked on the line in the editor.
 - **Mock interview test**: 10 concept questions and 2 coding problems under one clock, with no hints until you submit, then a scorecard, the questions to review and what to study next.
-- **Study material**: nine study guides with 90 quiz questions on C, pointers, memory, interrupts, RTOS, embedded memory, buses, reliability and networking, plus a one-page learning guide of what to remember and understand.
+- **Study material**: ten study guides with 102 quiz questions on C, pointers, memory, interrupts, RTOS, embedded memory, buses, reliability, reading code ("what does this print?") and networking, plus a one-page learning guide of what to remember and understand.
 - **Timed attempts** on single problems, a **C sandbox** with shareable links, a **14-day plan** for network platform roles, light and dark themes, and progress export and import.
 
 Run it locally (Node.js 22.12 or later):
@@ -21,6 +23,8 @@ cd trainer
 pnpm install
 pnpm dev
 ```
+
+Every push is checked by GitHub Actions: both builds, plus `pnpm verify`, which compiles every starter and model solution and runs every "what does this print?" answer.
 
 [`trainer/README.md`](trainer/README.md) covers every feature, the offline one-file build, how checking works, how to add a problem, and deployment.
 

@@ -15,6 +15,7 @@ export const QUIZ_TOPICS = [
   { id: 'memory', title: 'Embedded memory', summary: 'Sections, start-up, alignment, DMA' },
   { id: 'buses', title: 'Hardware and buses', summary: 'GPIO, UART, I²C, SPI' },
   { id: 'reliability', title: 'Reliability and boot', summary: 'Watchdog, faults, flash' },
+  { id: 'read_code', title: 'Read the code', summary: 'What does it print? What is wrong?' },
   { id: 'networking', title: 'Networking', summary: 'Byte order, headers, switching' },
 ];
 
@@ -1087,5 +1088,187 @@ export const QUIZ = [
     ],
     answer: 0,
     explain: 'STP elects a root bridge and puts redundant ports into a blocking state, unblocking them if an active link fails. Rapid STP (802.1w) converges in seconds rather than the 30–50 seconds of classic STP.',
+  },
+
+  /* ========================================================= Read the code */
+  {
+    id: 'read_bitwise_not_promotion', topic: 'read_code',
+    prompt: 'On a 32-bit MCU where <code>int</code> is 32 bits, what does this print?<pre><code>uint8_t a = 0x0F;\nuint8_t b = ~a;\nif (b == ~a) puts("equal");\nelse         puts("different");</code></pre>',
+    options: [
+      '<code>equal</code>, because both sides are 0xF0.',
+      'It is undefined behaviour, because <code>~</code> on an unsigned value overflows.',
+      '<code>different</code>, because <code>~a</code> is computed on <code>a</code> promoted to <code>int</code>, giving 0xFFFFFFF0, while <code>b</code> holds 0xF0.',
+      'It does not compile without a cast to <code>uint8_t</code>.',
+    ],
+    answer: 2,
+    explain: 'Integer promotion turns <code>a</code> into an <code>int</code> before <code>~</code>, so <code>~a</code> is 0xFFFFFFF0 (-16). Storing it in <code>b</code> truncates to 0xF0 (240), and 240 != -16. Write <code>(uint8_t)~a</code> when you mean an 8-bit inverse; MISRA C requires that cast for exactly this reason.',
+    verify: {
+      program: '#include <stdio.h>\n#include <stdint.h>\n\nint main(void) {\n    uint8_t a = 0x0F;\n    uint8_t b = ~a;\n    if (b == ~a) puts("equal");\n    else         puts("different");\n    return 0;\n}\n',
+      prints: 'different\n',
+    },
+  },
+  {
+    id: 'read_minus_one_sizeof', topic: 'read_code',
+    prompt: 'On a 32-bit MCU, what does this print?<pre><code>if (-1 &gt; sizeof(int)) puts("yes");\nelse                   puts("no");</code></pre>',
+    options: [
+      '<code>yes</code>, because <code>sizeof</code> yields an unsigned <code>size_t</code>, so -1 is converted to <code>SIZE_MAX</code>.',
+      '<code>no</code>, because -1 is less than 4.',
+      'It is undefined behaviour to compare a negative number with <code>sizeof</code>.',
+      'It depends on whether <code>char</code> is signed.',
+    ],
+    answer: 0,
+    explain: '<code>sizeof</code> has type <code>size_t</code>, an unsigned type at least as wide as <code>int</code>. The usual arithmetic conversions convert -1 to that unsigned type, giving 4294967295 on a 32-bit target, which is greater than 4. The conversion is well defined; <code>-Wsign-compare</code> warns about it.',
+    verify: {
+      program: '#include <stdio.h>\n\nint main(void) {\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored "-Wsign-compare"\n    if (-1 > sizeof(int)) puts("yes");\n    else                   puts("no");\n#pragma GCC diagnostic pop\n    return 0;\n}\n',
+      prints: 'yes\n',
+    },
+  },
+  {
+    id: 'read_sizeof_string', topic: 'read_code',
+    prompt: 'On a 32-bit MCU where pointers are 4 bytes, what does this print?<pre><code>char name[] = "UART";\nconst char *p = name;\nprintf("%zu %zu %zu\\n", sizeof(name), strlen(name), sizeof(p));</code></pre>',
+    options: [
+      '<code>4 4 4</code>',
+      '<code>5 4 5</code>',
+      '<code>4 4 5</code>',
+      '<code>5 4 4</code>',
+    ],
+    answer: 3,
+    explain: '<code>name</code> is an array sized from the literal, which includes the terminating <code>\'\\0\'</code>, so <code>sizeof(name)</code> is 5 while <code>strlen</code> stops before the terminator at 4. <code>p</code> is a pointer, so <code>sizeof(p)</code> is the pointer size, 4, whatever it points at. This is also why an array passed to a function loses its size.',
+    verify: {
+      program: '#include <stdio.h>\n#include <string.h>\n\nint main(void) {\n    char name[] = "UART";\n    const char *p = name;\n    printf("%zu %zu %zu\\n", sizeof(name), strlen(name), sizeof(p));\n    return 0;\n}\n',
+      prints: '5 4 4\n',
+    },
+  },
+  {
+    id: 'read_struct_offset', topic: 'read_code',
+    prompt: 'On a typical 32-bit ARM target, what does this print?<pre><code>struct pkt {\n    uint8_t  id;\n    uint16_t len;\n    uint8_t  flags;\n    uint32_t crc;\n};\nprintf("%zu %zu\\n", sizeof(struct pkt), offsetof(struct pkt, crc));</code></pre>',
+    options: [
+      '<code>8 4</code>',
+      '<code>12 8</code>',
+      '<code>16 12</code>',
+      '<code>12 4</code>',
+    ],
+    answer: 1,
+    explain: 'Each member sits at a multiple of its alignment: <code>id</code> at 0, one padding byte, <code>len</code> at 2, <code>flags</code> at 4, three padding bytes, then <code>crc</code> at 8. The size is 12, already a multiple of the struct\'s alignment (4). The packed sum of the members would be 8, which is why you never <code>memcpy</code> a wire format straight into a struct like this.',
+    verify: {
+      program: '#include <stdio.h>\n#include <stdint.h>\n#include <stddef.h>\n\nstruct pkt {\n    uint8_t  id;\n    uint16_t len;\n    uint8_t  flags;\n    uint32_t crc;\n};\n\nint main(void) {\n    printf("%zu %zu\\n", sizeof(struct pkt), offsetof(struct pkt, crc));\n    return 0;\n}\n',
+      prints: '12 8\n',
+    },
+  },
+  {
+    id: 'read_macro_max_increment', topic: 'read_code',
+    prompt: 'What does this print?<pre><code>#define MAX(a, b) ((a) &gt; (b) ? (a) : (b))\n\nint i = 5, j = 3;\nint m = MAX(i++, j);\nprintf("%d %d\\n", m, i);</code></pre>',
+    options: [
+      '<code>5 6</code>',
+      '<code>6 6</code>',
+      '<code>5 7</code>',
+      '<code>6 7</code>',
+    ],
+    answer: 3,
+    explain: 'The macro expands to <code>((i++) &gt; (j) ? (i++) : (j))</code>. The condition reads 5 and makes <code>i</code> 6; because 5 &gt; 3, the second <code>i++</code> runs, yields 6 and makes <code>i</code> 7. There is a sequence point after the condition of <code>?:</code>, so this is well defined, just wrong. A <code>static inline</code> function evaluates each argument once.',
+    verify: {
+      program: '#include <stdio.h>\n\n#define MAX(a, b) ((a) > (b) ? (a) : (b))\n\nint main(void) {\n    int i = 5, j = 3;\n    int m = MAX(i++, j);\n    printf("%d %d\\n", m, i);\n    return 0;\n}\n',
+      prints: '6 7\n',
+    },
+  },
+  {
+    id: 'read_and_vs_equals', topic: 'read_code',
+    prompt: 'What does this print?<pre><code>uint8_t status = 0x04;\nif (status &amp; 0x04 == 0x04) puts("ready");\nelse                         puts("busy");</code></pre>',
+    options: [
+      '<code>ready</code>, because bit 2 of <code>status</code> is set.',
+      '<code>busy</code>, because <code>==</code> binds tighter than <code>&amp;</code>, so the test is <code>status &amp; 1</code>, which is 0.',
+      'It does not compile.',
+      'It is undefined behaviour.',
+    ],
+    answer: 1,
+    explain: 'In C\'s precedence table the equality operators sit above the bitwise <code>&amp;</code>, so this parses as <code>status &amp; (0x04 == 0x04)</code>, that is <code>status &amp; 1</code>. Write <code>(status &amp; 0x04) == 0x04</code>, or just <code>(status &amp; 0x04) != 0</code>. GCC and Clang warn with <code>-Wparentheses</code>.',
+    verify: {
+      program: '#include <stdio.h>\n#include <stdint.h>\n\nint main(void) {\n    uint8_t status = 0x04;\n#pragma GCC diagnostic push\n#pragma GCC diagnostic ignored "-Wparentheses"\n    if (status & 0x04 == 0x04) puts("ready");\n    else                         puts("busy");\n#pragma GCC diagnostic pop\n    return 0;\n}\n',
+      prints: 'busy\n',
+    },
+  },
+  {
+    id: 'read_unsigned_wrap', topic: 'read_code',
+    prompt: 'On a 32-bit MCU where <code>int</code> is 32 bits, what does this print?<pre><code>uint16_t a = 100, b = 200;\nuint16_t d = a - b;\nprintf("%d %d\\n", d, a - b);</code></pre>',
+    options: [
+      '<code>-100 -100</code>',
+      '<code>65436 65436</code>',
+      '<code>65436 -100</code>',
+      '<code>65436 4294967196</code>',
+    ],
+    answer: 2,
+    explain: '<code>a - b</code> is computed after promotion to <code>int</code>, so the expression itself is -100. Storing it in a <code>uint16_t</code> converts it modulo 2<sup>16</sup>, giving 65436, and <code>d</code> is promoted back to a non-negative <code>int</code> when passed to <code>printf</code>. Unsigned wraparound only happens at the width of the type you store into.',
+    verify: {
+      program: '#include <stdio.h>\n#include <stdint.h>\n\nint main(void) {\n    uint16_t a = 100, b = 200;\n    uint16_t d = a - b;\n    printf("%d %d\\n", d, a - b);\n    return 0;\n}\n',
+      prints: '65436 -100\n',
+    },
+  },
+  {
+    id: 'read_negative_division', topic: 'read_code',
+    prompt: 'What does this print with a C99 (or later) compiler?<pre><code>printf("%d %d\\n", -7 / 2, -7 % 2);</code></pre>',
+    options: [
+      '<code>-3 -1</code>',
+      '<code>-4 1</code>',
+      '<code>-3 1</code>',
+      '<code>-4 -1</code>',
+    ],
+    answer: 0,
+    explain: 'Since C99, integer division truncates toward zero, so -7 / 2 is -3 (not -4 as floor division would give). The remainder follows from <code>(a / b) * b + a % b == a</code>, so it takes the sign of the dividend: -1. Watch for this when you use <code>%</code> to wrap a ring-buffer index that can go negative.',
+    verify: {
+      program: '#include <stdio.h>\n\nint main(void) {\n    printf("%d %d\\n", -7 / 2, -7 % 2);\n    return 0;\n}\n',
+      prints: '-3 -1\n',
+    },
+  },
+  {
+    id: 'read_register_field', topic: 'read_code',
+    prompt: 'What does this print?<pre><code>uint32_t reg = 0xABCD1234;\nreg &amp;= ~(0xFu &lt;&lt; 8);   /* clear bits 11..8 */\nreg |= 5u &lt;&lt; 8;          /* set field to 5 */\nprintf("0x%08" PRIX32 "\\n", reg);</code></pre>',
+    options: [
+      '<code>0xABCD1534</code>',
+      '<code>0xABCD1734</code>',
+      '<code>0xABCD5234</code>',
+      '<code>0xABCD0534</code>',
+    ],
+    answer: 0,
+    explain: '<code>0xFu &lt;&lt; 8</code> is 0x00000F00, and <code>~</code> of it clears the nibble holding the 2, giving 0xABCD1034. OR-ing in <code>5u &lt;&lt; 8</code> (0x500) gives 0xABCD1534. Clearing the field before setting it matters: OR alone would give 0x7 in that nibble. Using unsigned constants keeps the shift and the <code>~</code> well defined.',
+    verify: {
+      program: '#include <stdio.h>\n#include <stdint.h>\n#include <inttypes.h>\n\nint main(void) {\n    uint32_t reg = 0xABCD1234;\n    reg &= ~(0xFu << 8);   /* clear bits 11..8 */\n    reg |= 5u << 8;          /* set field to 5 */\n    printf("0x%08" PRIX32 "\\n", reg);\n    return 0;\n}\n',
+      prints: '0xABCD1534\n',
+    },
+  },
+  {
+    id: 'read_wrong_isr_flag', topic: 'read_code',
+    prompt: 'This works at <code>-O0</code> but hangs in the release build (<code>-O2</code>). What is wrong?<pre><code>static bool rx_done;\n\nvoid USART1_IRQHandler(void) {\n    rx_done = true;\n}\n\nvoid wait_rx(void) {\n    while (!rx_done) { }\n    rx_done = false;\n}</code></pre>',
+    options: [
+      'An ISR cannot write a <code>static</code> variable.',
+      'The ISR forgot to disable interrupts while writing the flag.',
+      '<code>bool</code> is not atomic on ARM, so the flag is half-written.',
+      '<code>rx_done</code> is not <code>volatile</code>, so the optimiser may read it once, see <code>false</code>, and turn the loop into <code>while (1)</code>.',
+    ],
+    answer: 3,
+    explain: 'The compiler cannot see that an interrupt calls <code>USART1_IRQHandler</code> during the loop, so it may keep <code>rx_done</code> in a register and never reload it. Declaring it <code>static volatile bool rx_done;</code> forces a real load on every iteration. A single-byte store is already atomic on Cortex-M, so no critical section is needed for this flag.',
+  },
+  {
+    id: 'read_wrong_return_local', topic: 'read_code',
+    prompt: 'What is wrong with this helper?<pre><code>const char *imei_to_str(uint32_t hi, uint32_t lo) {\n    char buf[24];\n    snprintf(buf, sizeof buf, "%lu%lu",\n             (unsigned long)hi, (unsigned long)lo);\n    return buf;\n}</code></pre>',
+    options: [
+      '<code>snprintf</code> may overflow <code>buf</code>.',
+      'It returns a pointer to <code>buf</code>, a local array whose lifetime ends when the function returns, so the caller reads a dangling pointer into reused stack.',
+      'It should return <code>char *</code>, not <code>const char *</code>.',
+      'Nothing; <code>buf</code> stays valid until the next call.',
+    ],
+    answer: 1,
+    explain: 'Automatic variables live on the stack only until the function returns; using the pointer afterwards is undefined behaviour, and the next function call or interrupt overwrites the text. Have the caller pass in the buffer and its size (or, if you accept non-reentrancy, make it <code>static</code>). <code>snprintf</code> itself is bounded by <code>sizeof buf</code>, so it cannot overflow.',
+  },
+  {
+    id: 'read_wrong_strcpy', topic: 'read_code',
+    prompt: 'The APN string arrives in an AT command from the network operator. What is wrong?<pre><code>static char g_apn[16];\n\nvoid set_apn(const char *apn) {\n    strcpy(g_apn, apn);\n}</code></pre>',
+    options: [
+      '<code>strcpy</code> is not reentrant, so it cannot be used from a task.',
+      '<code>g_apn</code> should be on the heap.',
+      '<code>strcpy</code> copies until the terminator with no bound, so an APN of 16 characters or more overflows <code>g_apn</code> and corrupts whatever follows it in RAM.',
+      '<code>g_apn</code> is not zero-initialised.',
+    ],
+    answer: 2,
+    explain: 'Any external input must be length-checked: a buffer overflow in <code>.bss</code> silently corrupts neighbouring globals and is a classic security hole. Check <code>strlen(apn) &lt; sizeof g_apn</code> and reject longer input, or copy with <code>snprintf(g_apn, sizeof g_apn, "%s", apn)</code>, which always terminates. (<code>strncpy</code> does not add a terminator when it truncates.) A <code>static</code> array is already zero-initialised.',
   },
 ];

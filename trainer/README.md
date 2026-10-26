@@ -6,7 +6,7 @@ A first visit opens a welcome page that asks what you are preparing for (learnin
 
 ## Practise: coding problems
 
-36 problems in eight topics, 11 easy, 21 medium and 4 hard:
+42 problems in nine topics, 13 easy, 24 medium and 5 hard:
 
 | Topic | Problems |
 |---|---|
@@ -18,8 +18,9 @@ A first visit opens a welcome page that asks what you are preparing for (learnin
 | Networking | Subnet masks and prefixes, parse an IPv4 address, MAC addresses, Internet checksum, Ethernet and VLAN header, validate an IPv4 header, MAC learning table |
 | Platform and hardware | Poll a register with a timeout, temperature sensor reading, software timers |
 | State machines | Button debouncer, fan control with hysteresis |
+| Find the bug | ADC peak macros, frame checksum as hex, modem counters report, tick timeouts, dual encoder fusion, UART receive FIFO |
 
-Each problem has a difficulty, a target time and the follow-up questions interviewers commonly ask next.
+Each problem has a difficulty, a target time and the follow-up questions interviewers commonly ask next. The **Find the bug** problems copy a common written-test format: the starter is realistic code that compiles cleanly but has two or three planted bugs (macro pitfalls, sign extension, promotion, off-by-one, wraparound), and the checks pass once every bug is fixed.
 
 1. Pick a problem from the sidebar (or the picker on a phone), edit the C code, and choose **Run checks** (Ctrl+Enter).
 2. Fix compiler errors, failing checks or undefined-behaviour crashes. Lines with errors are marked in the editor's gutter, and each `file.c:line:col` in the output jumps to that spot.
@@ -30,7 +31,7 @@ Each problem has a difficulty, a target time and the follow-up questions intervi
 
 ## Study: guides, quizzes and the learning guide
 
-- **Study guide and quiz** covers the spoken part of the interview in nine topics: C and the compiler, pointers and arrays, memory management, interrupts and concurrency, RTOS, embedded memory, hardware and buses, reliability and boot, and networking. Each topic opens on a study guide with notes, code examples and points worth saying in an interview, then 10 multiple-choice questions with explanations (90 in all, plus a shuffled mixed review). Keys 1–4 choose an answer and Enter checks it.
+- **Study guide and quiz** covers the spoken part of the interview in ten topics: C and the compiler, pointers and arrays, memory management, interrupts and concurrency, RTOS, embedded memory, hardware and buses, reliability and boot, read the code, and networking. Each topic opens on a study guide with notes, code examples and points worth saying in an interview, then multiple-choice questions with explanations (102 in all, plus a shuffled mixed review). **Read the code** asks "what does this print?" and "what is wrong with this code?" about short snippets; every printed answer is confirmed by compiling and running the snippet. Keys 1–4 choose an answer and Enter checks it.
 - The **Learning guide** sums everything up in 12 areas, each split into *what to remember* (facts, numbers and syntax to know by heart) and *what to understand* (ideas to explain in your own words), with links to the matching guides, quizzes and plan days.
 - The **14-day training plan** orders the problems for network platform software roles, such as C developers on switches, routers and access points. It adds study questions on networking, Linux, concurrency, debugging and behavioural interviews, and each day has its own study guide and 5-question quiz.
 
@@ -53,7 +54,7 @@ pnpm install
 pnpm dev
 ```
 
-Open the local URL shown by Vite. `pnpm build` creates a static production site in `dist/`, and `pnpm verify` checks every model solution (see [Adding a problem](#adding-a-problem)).
+Open the local URL shown by Vite. `pnpm build` creates a static production site in `dist/`, and `pnpm verify` checks the content (see [Adding a problem](#adding-a-problem)). GitHub Actions runs both builds and `pnpm verify` on every push and pull request (`.github/workflows/trainer.yml`).
 
 ### One-file version for offline study
 
@@ -77,7 +78,7 @@ Open the local URL shown by Vite. `pnpm build` creates a static production site 
 | `guide.js`, `quiz.js` | The topic study guides and their quiz questions |
 | `plan.js`, `plan-guide.js` | The 14-day plan, and each day's guide and quiz |
 | `notes.js` | The learning guide |
-| `verify-solutions.mjs` | `pnpm verify`: compiles every model solution against its checks |
+| `verify-solutions.mjs` | `pnpm verify`: checks every starter, model solution and printed quiz answer |
 | `build-single.mjs` | `pnpm build:single`: the offline one-file build |
 | `supabase-trainer.js`, `supabase-schema.sql` | Optional cloud backup |
 
@@ -85,7 +86,9 @@ Open the local URL shown by Vite. `pnpm build` creates a static production site 
 
 Problems live in `problems.js`. Each entry has the text shown on the page, a starter (which must compile), a C `prelude` with test helpers, `checks` as `[label, C expression]` pairs, and optional `forbid` rules. The sidebar, picker, progress card and mock test are generated from this list. To include it in the training plan, add its id to a day in `plan.js`. Bump `CHECKER_VERSION` in `problems.js` whenever checks get stricter, so earlier passes have to be re-run.
 
-Give the problem an entry in `hints.js` too: three graded hints, a model solution and a short explanation. Then run `pnpm verify`, which compiles every model solution with the real checker in Node and fails if any of them no longer passes its problem's checks. Run it after changing any problem's checks as well.
+Give the problem an entry in `hints.js` too: three graded hints, a model solution and a short explanation. Then run `pnpm verify`. It uses the real checker in Node and fails if any starter does not compile or already passes, or if any model solution no longer passes its checks. Run it after changing any problem's checks as well; CI runs it on every push.
+
+A "what does this print?" quiz question can carry `verify: { program, prints }`: the complete program it shows and its exact output. `pnpm verify` compiles and runs it, so the answer key cannot drift from what the code really does.
 
 ## Deploy to Vercel
 
