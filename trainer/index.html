@@ -23,6 +23,7 @@
       <button class="plan-button" id="plan-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">14</span><span class="plan-button-text"><b id="plan-button-label">Open the training plan</b><small id="plan-button-meta">14 days of problems and study</small></span></button>
       <button class="plan-button" id="quiz-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">?</span><span class="plan-button-text"><b id="quiz-button-label">Study guide and quiz</b><small id="quiz-button-meta">Read the notes, then test yourself</small></span></button>
       <button class="plan-button" id="notes-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">≡</span><span class="plan-button-text"><b id="notes-button-label">Learning guide</b><small>What to remember and understand</small></span></button>
+      <button class="plan-button" id="sandbox-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">{ }</span><span class="plan-button-text"><b id="sandbox-button-label">C sandbox</b><small>Write and run any C program</small></span></button>
       <section class="progress-card" aria-live="polite">
         <div class="progress-heading"><div><span class="eyebrow">YOUR PROGRESS</span><h2>Problems solved</h2></div><strong id="progress-count">0 / 0</strong></div>
         <div class="progress-track"><span id="progress-fill"></span></div>
@@ -44,8 +45,17 @@
         <div class="editor-wrap"><div class="line-numbers" id="line-numbers" aria-hidden="true">1</div><textarea id="code-editor" aria-label="C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
         <div class="run-row"><div class="run-hint" id="save-hint">Edits stay in this browser until you download them.</div><div class="run-actions"><button id="next-button" class="next-button" type="button" hidden>Next problem →</button><button id="run-button" class="run-button" type="button"><span>▶</span> Run checks</button></div></div>
         <section class="result-panel idle" id="result-panel" aria-live="polite"><div class="result-icon" id="result-icon">↳</div><div class="result-content"><b id="result-title">Ready when you are</b><p id="result-message">Run the checks to compile your code and see exactly what passes.</p><ul class="check-list" id="check-list" hidden></ul><pre id="result-output" hidden></pre></div><span id="result-compiler" class="compiler-label"></span></section>
-        <section class="program-panel" id="program-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span id="program-meta"></span></div><pre id="program-output"></pre><p id="program-note" hidden></p></section>
+        <section class="program-panel" id="program-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span class="program-meta" id="program-meta"></span></div><pre id="program-output"></pre><p id="program-note" hidden></p></section>
         <section class="followups"><h4><span class="tip-icon" aria-hidden="true">?</span> Interviewers often ask next</h4><ul id="followups"></ul><p>Practise answering these out loud. Explaining your trade-offs matters as much as passing the checks.</p></section>
+      </article>
+      <article class="exercise-panel" id="sandbox-panel" hidden>
+        <p class="exercise-description">Try out anything in C: test how a pointer cast behaves, print a struct's size, or sketch a ring buffer before you solve the problem. Code here is not checked, only compiled and run, with the same strict C11 rules and undefined-behaviour traps as the problems.</p>
+        <div class="editor-head"><label for="sandbox-editor">Sandbox code <span>· saved automatically in this browser</span></label><div class="editor-actions"><button class="text-button" id="sandbox-reset" type="button">Reset example</button><button class="text-button" id="sandbox-download" type="button">Download .c</button></div></div>
+        <div class="editor-wrap"><div class="line-numbers" id="sandbox-lines" aria-hidden="true">1</div><textarea id="sandbox-editor" aria-label="Sandbox C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
+        <label class="stdin-label" for="sandbox-stdin">Input <span>· stdin, read with scanf, getchar or fgets</span></label>
+        <textarea class="stdin-input" id="sandbox-stdin" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Optional: text your program reads from stdin"></textarea>
+        <div class="run-row"><div class="run-hint">Shortcut: Ctrl+Enter (⌘+Enter on Mac)</div><button id="sandbox-run" class="run-button" type="button"><span>▶</span> Run</button></div>
+        <section class="program-panel" id="sandbox-output-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span class="program-meta" id="sandbox-meta"></span></div><pre id="sandbox-output"></pre><p id="sandbox-note" hidden></p></section>
       </article>
       <article class="plan-panel" id="plan-panel" hidden>
         <div class="plan-head"><p class="plan-intro" id="plan-intro"></p><div class="plan-total"><strong id="plan-count">0 / 0</strong><span>tasks done</span></div></div>

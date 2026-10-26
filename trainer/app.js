@@ -14,9 +14,23 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   const DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
   const CHECK_TIMEOUT_MS = 30000;              // compile + run budget per check
   const INDENT = '    ';
+  const SANDBOX_FILE = 'sandbox.c';
+  const SANDBOX_STARTER = `#include <stdio.h>
+#include <stdint.h>
+
+/* A scratch pad: write any C here and select Run. */
+int main(void)
+{
+    uint32_t reg = 0x12345678u;
+    printf("reg = 0x%08X, low byte = 0x%02X\\n", (unsigned)reg, (unsigned)(reg & 0xFFu));
+    printf("sizeof(int) = %zu, sizeof(void *) = %zu\\n", sizeof(int), sizeof(void *));
+    return 0;
+}
+`;
 
   const $ = (id) => document.getElementById(id);
   const editor = $('code-editor');
+  const sandbox = $('sandbox-editor');
 
   /* ---------------------------------------------------------------- storage */
   let saved = {};
@@ -42,7 +56,7 @@ import { NOTES, NOTES_INTRO } from './notes.js';
    * under whatever tab happens to be open when the worker answers. */
   let checker = null;
   let compilerReady = false;
-  let pending = null;      // { exercise, code }
+  let pending = null;      // { kind: 'check', exercise, code } or { kind: 'run' } from the sandbox
   let watchdog = null;
   const lastResult = {};   // latest result per exercise, so switching tabs keeps the checklist
 
@@ -55,12 +69,15 @@ import { NOTES, NOTES_INTRO } from './notes.js';
 
   const setReadyStatus = () => setStatus('ready', 'Browser compiler ready · no setup needed');
 
+  /* One compiler serves the problems and the sandbox, so a job in either
+     disables both run buttons. */
   function updateRunButton() {
-    const button = $('run-button');
-    if (pending) { button.disabled = true; button.innerHTML = '<span>…</span> Checking'; }
-    else if (!checker) { button.disabled = false; button.innerHTML = '<span>↻</span> Reload compiler'; }
-    else if (!compilerReady) { button.disabled = true; button.innerHTML = '<span>…</span> Loading compiler'; }
-    else { button.disabled = false; button.innerHTML = '<span>▶</span> Run checks'; }
+    [[$('run-button'), 'Run checks', 'Checking'], [$('sandbox-run'), 'Run', 'Running']].forEach(([button, idle, busy]) => {
+      if (pending) { button.disabled = true; button.innerHTML = `<span>…</span> ${busy}`; }
+      else if (!checker) { button.disabled = false; button.innerHTML = '<span>↻</span> Reload compiler'; }
+      else if (!compilerReady) { button.disabled = true; button.innerHTML = '<span>…</span> Loading compiler'; }
+      else { button.disabled = false; button.innerHTML = `<span>▶</span> ${idle}`; }
+    });
   }
 
   function startChecker() {
@@ -104,8 +121,14 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   function finishCheck(result) {
     clearTimeout(watchdog); watchdog = null;
     if (!pending) return;
-    const { exercise, code } = pending;
+    const { kind, exercise, code } = pending;
     pending = null;
+    if (kind === 'run') {
+      // A setup failure or timeout has no program, only a message.
+      renderProgram(result.program || { state: 'error', output: result.message }, SANDBOX_OUTPUT);
+      updateRunButton();
+      return;
+    }
     saved.results[exercise] = { exercise, passed: !!result.passed, code, version: CHECKER_VERSION, at: new Date().toISOString() };
     persist();
     window.dispatchEvent(new CustomEvent('trainer:result', { detail: { ...saved.results[exercise] } }));
@@ -118,10 +141,20 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   function runCheck() {
     if (!checker) { startChecker(); return; }
     if (!compilerReady || pending) return;
-    pending = { exercise: active, code: editor.value };
+    pending = { kind: 'check', exercise: active, code: editor.value };
     checker.postMessage({ type: 'check', exercise: pending.exercise, filename: EXERCISES[pending.exercise].filename, code: pending.code });
     watchdog = setTimeout(onTimeout, CHECK_TIMEOUT_MS);
     showChecking();
+    updateRunButton();
+  }
+
+  function runSandbox() {
+    if (!checker) { startChecker(); return; }
+    if (!compilerReady || pending) return;
+    pending = { kind: 'run' };
+    checker.postMessage({ type: 'run', filename: SANDBOX_FILE, code: sandbox.value, input: $('sandbox-stdin').value });
+    watchdog = setTimeout(onTimeout, CHECK_TIMEOUT_MS);
+    renderProgram(null, SANDBOX_OUTPUT);
     updateRunButton();
   }
 
@@ -134,9 +167,9 @@ import { NOTES, NOTES_INTRO } from './notes.js';
       : then.toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 
-  function updateLines() {
-    const n = Math.max(1, editor.value.split('\n').length);
-    $('line-numbers').textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
+  function updateLines(area = editor) {
+    const n = Math.max(1, area.value.split('\n').length);
+    area.previousElementSibling.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
   }
 
   function problemState(id) {
@@ -563,16 +596,23 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   }
 
   /* The workspace shows the open problem, the training plan, the learning
-     guide, the concept quiz, or one plan day's guide and quiz ('day', shown
-     in the quiz panel). */
+     guide, the concept quiz, the C sandbox, or one plan day's guide and quiz
+     ('day', shown in the quiz panel). */
   function showView(next) {
-    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes';
+    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes', inSandbox = next === 'sandbox';
     saved.view = next;
     persist();
     $('plan-panel').hidden = !plan;
     $('notes-panel').hidden = !inNotes;
     $('quiz-panel').hidden = !(inQuiz || inDay);
-    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes;
+    $('sandbox-panel').hidden = !inSandbox;
+    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes || inSandbox;
+    $('sandbox-button').setAttribute('aria-pressed', String(inSandbox));
+    $('sandbox-button-label').textContent = inSandbox ? 'Back to the problem' : 'C sandbox';
+    if (inSandbox) {
+      $('exercise-kicker').textContent = 'SANDBOX · NOT CHECKED';
+      $('exercise-title').textContent = 'Write and run any C';
+    }
     $('notes-button').setAttribute('aria-pressed', String(inNotes));
     $('notes-button-label').textContent = inNotes ? 'Back to the problem' : 'Learning guide';
     if (inNotes) {
@@ -669,20 +709,33 @@ import { NOTES, NOTES_INTRO } from './notes.js';
     renderChecklist(checks);
   }
 
-  function renderProgram(program) {
-    const panel = $('program-panel'), out = $('program-output'), note = $('program-note');
+  /* The problem and the sandbox each have an output panel; these name its
+     elements and the wording that differs between them. */
+  const PROBLEM_OUTPUT = {
+    panel: 'program-panel', meta: 'program-meta', out: 'program-output', note: 'program-note',
+    error: 'could not build on its own',
+    none: 'Your code has no main(), so there is nothing to run. Add one to print values while you work; the checker ignores it.',
+  };
+  const SANDBOX_OUTPUT = {
+    panel: 'sandbox-output-panel', meta: 'sandbox-meta', out: 'sandbox-output', note: 'sandbox-note',
+    error: 'did not compile',
+    none: 'Your code has no main(), so there is nothing to run.',
+  };
+
+  function renderProgram(program, view = PROBLEM_OUTPUT) {
+    const panel = $(view.panel), out = $(view.out), note = $(view.note);
     panel.hidden = !program;
     if (!program) return;
     panel.className = `program-panel ${program.state}`;
     const meta = {
       ran: `main() exited with code ${program.exitCode} · ${program.ms} ms`,
-      error: 'could not build on its own',
+      error: view.error,
       crash: 'crashed while running',
       none: '',
     };
-    $('program-meta').textContent = meta[program.state] || '';
+    $(view.meta).textContent = meta[program.state] || '';
     if (program.state === 'none') {
-      note.textContent = 'Your code has no main(), so there is nothing to run. Add one to print values while you work; the checker ignores it.';
+      note.textContent = view.none;
     } else if (program.state === 'ran' && !program.output.trim()) {
       note.textContent = 'Your program printed nothing.';
     } else {
@@ -740,40 +793,46 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   /* ----------------------------------------------------------------- editor
    * execCommand('insertText') keeps the browser's undo history (Ctrl+Z),
    * which setRangeText wipes. Falls back to setRangeText if unsupported. */
-  function insertText(text) {
-    editor.focus();
+  function insertText(area, text) {
+    area.focus();
     if (!document.execCommand('insertText', false, text)) {
-      editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
-      editor.dispatchEvent(new Event('input'));
+      area.setRangeText(text, area.selectionStart, area.selectionEnd, 'end');
+      area.dispatchEvent(new Event('input'));
     }
   }
 
-  function outdentCurrentLine() {
-    const v = editor.value, pos = editor.selectionStart;
+  function outdentCurrentLine(area) {
+    const v = area.value, pos = area.selectionStart;
     const lineStart = v.lastIndexOf('\n', pos - 1) + 1;
     const spaces = /^ {0,4}/.exec(v.slice(lineStart))[0].length;
     if (!spaces) return;
-    editor.setSelectionRange(lineStart, lineStart + spaces);
+    area.setSelectionRange(lineStart, lineStart + spaces);
     if (!document.execCommand('delete')) {
-      editor.setRangeText('', lineStart, lineStart + spaces, 'start');
-      editor.dispatchEvent(new Event('input'));
+      area.setRangeText('', lineStart, lineStart + spaces, 'start');
+      area.dispatchEvent(new Event('input'));
     }
     const back = Math.max(lineStart, pos - spaces);
-    editor.setSelectionRange(back, back);
+    area.setSelectionRange(back, back);
   }
 
-  editor.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); runCheck(); return; }
-    if (event.key === 'Tab') { event.preventDefault(); if (event.shiftKey) outdentCurrentLine(); else insertText(INDENT); return; }
-    if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
-      // Keep the current indentation; add one level after an opening brace.
-      const v = editor.value, pos = editor.selectionStart;
-      const line = v.slice(v.lastIndexOf('\n', pos - 1) + 1, pos);
-      const indent = /^\s*/.exec(line)[0] + (/\{\s*$/.test(line) ? INDENT : '');
-      event.preventDefault();
-      insertText('\n' + indent);
-    }
-  });
+  /* Code-editor keys for the problem and sandbox editors; Ctrl+Enter runs. */
+  function bindEditorKeys(area, run) {
+    area.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); run(); return; }
+      if (event.key === 'Tab') { event.preventDefault(); if (event.shiftKey) outdentCurrentLine(area); else insertText(area, INDENT); return; }
+      if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
+        // Keep the current indentation; add one level after an opening brace.
+        const v = area.value, pos = area.selectionStart;
+        const line = v.slice(v.lastIndexOf('\n', pos - 1) + 1, pos);
+        const indent = /^\s*/.exec(line)[0] + (/\{\s*$/.test(line) ? INDENT : '');
+        event.preventDefault();
+        insertText(area, '\n' + indent);
+      }
+    });
+    area.addEventListener('scroll', () => { area.previousElementSibling.scrollTop = area.scrollTop; });
+  }
+  bindEditorKeys(editor, runCheck);
+  bindEditorKeys(sandbox, runSandbox);
 
   editor.addEventListener('input', () => {
     saved.code[active] = editor.value;
@@ -781,7 +840,7 @@ import { NOTES, NOTES_INTRO } from './notes.js';
     persist(); updateLines(); renderProgress();
     $('save-hint').textContent = 'Saved in this browser.';
   });
-  editor.addEventListener('scroll', () => { $('line-numbers').scrollTop = editor.scrollTop; });
+  sandbox.addEventListener('input', () => { saved.sandbox = sandbox.value; persist(); updateLines(sandbox); });
 
   /* ---------------------------------------------------------------- buttons */
   $('next-button').addEventListener('click', () => {
@@ -801,6 +860,7 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   $('plan-button').addEventListener('click', toggleView('plan'));
   $('quiz-button').addEventListener('click', toggleView('quiz', focusQuiz));
   $('notes-button').addEventListener('click', toggleView('notes', () => window.scrollTo({ top: 0 })));
+  $('sandbox-button').addEventListener('click', toggleView('sandbox', () => sandbox.focus()));
   $('quiz-back').addEventListener('click', () => showView('plan'));
 
   $('quiz-check').addEventListener('click', checkOrAdvance);
@@ -851,13 +911,24 @@ import { NOTES, NOTES_INTRO } from './notes.js';
     setPanel('idle', '↳', 'Starter restored', 'Your saved draft for this exercise was replaced with the starter code.');
   });
 
-  $('download-button').addEventListener('click', () => {
-    const blob = new Blob([editor.value], { type: 'text/x-c' });
+  function downloadC(code, filename) {
+    const blob = new Blob([code], { type: 'text/x-c' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = EXERCISES[active].filename;
+    a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);   // revoking immediately can cancel the download in Firefox
+  }
+  $('download-button').addEventListener('click', () => downloadC(editor.value, EXERCISES[active].filename));
+
+  $('sandbox-run').addEventListener('click', runSandbox);
+  $('sandbox-download').addEventListener('click', () => downloadC(sandbox.value, SANDBOX_FILE));
+  $('sandbox-reset').addEventListener('click', () => {
+    if (sandbox.value !== SANDBOX_STARTER && !confirm('Replace your sandbox code with the example? Download it first if you want to keep it.')) return;
+    sandbox.value = SANDBOX_STARTER;
+    delete saved.sandbox;
+    persist(); updateLines(sandbox);
+    renderProgram(null, SANDBOX_OUTPUT);
   });
 
   /* ------------------------------------------------------------------ start */
@@ -871,7 +942,9 @@ import { NOTES, NOTES_INTRO } from './notes.js';
   buildPlan();
   buildQuizTopics();
   buildNotes();
+  sandbox.value = saved.sandbox ?? SANDBOX_STARTER;
+  updateLines(sandbox);
   startChecker();
   selectExercise(active);
-  if (['plan', 'quiz', 'day', 'notes'].includes(startView)) showView(startView);
+  if (['plan', 'quiz', 'day', 'notes', 'sandbox'].includes(startView)) showView(startView);
 })();

@@ -22,8 +22,8 @@ async function getCompiler() {
 }
 
 self.addEventListener('message', async (event) => {
-  if (event.data?.type !== 'check') return;
-  const {exercise, filename, code} = event.data;
+  const {type, exercise, filename, code, input} = event.data ?? {};
+  if (type !== 'check' && type !== 'run') return;
   let compiler;
   try {
     compiler = await getCompiler();
@@ -32,6 +32,11 @@ self.addEventListener('message', async (event) => {
     return;
   }
   try {
+    if (type === 'run') {   // the sandbox: just build and run, no checks
+      self.postMessage({type:'loading', message:'Compiling and running…'});
+      self.postMessage({type:'result', result:{program: await runProgram(compiler, filename, code, input)}});
+      return;
+    }
     self.postMessage({type:'loading', message:'Compiling and running checks…'});
     const result = await runChecks(compiler, exercise, filename, code);
     if (result.phase !== 'compile') {

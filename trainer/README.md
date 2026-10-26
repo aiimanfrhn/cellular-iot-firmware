@@ -18,6 +18,8 @@ A **14-day training plan** (the button under the introduction) orders the proble
 
 The **Learning guide** page sums up everything in 12 areas, each split into *what to remember* (facts, numbers and syntax to know by heart) and *what to understand* (ideas to explain in your own words), with links to the matching guides, quizzes and plan days. A filter shows just one of the two lists. It lives in `notes.js`; update it when the guides change.
 
+The **C sandbox** is a free-form editor for trying things out: write any C program, give it optional stdin, and choose **Run** (Ctrl+Enter) to see its output and exit code. Nothing is checked. It compiles with the same strict flags and undefined-behaviour traps as the problems, and its code is saved in this browser.
+
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
 ## Run locally

@@ -87,12 +87,13 @@ const CRASH_HINT = 'This usually means undefined behaviour: a shift by the full 
 const hasMain = (code) => /\bmain\s*\(/.test(stripComments(code));
 
 /* Compile and run the learner's code on its own, so they can see what their
-   main() prints. Returns { state, output, exitCode?, ms? } where state is
-   'none' (no main), 'ran', 'error' (did not build) or 'crash'. */
-export async function runProgram(compiler, filename, code) {
+   main() prints. input is handed to the program as stdin. Returns
+   { state, output, exitCode?, ms? } where state is 'none' (no main), 'ran',
+   'error' (did not build) or 'crash'. */
+export async function runProgram(compiler, filename, code, input = '') {
   if (!hasMain(code)) return { state: 'none', output: '' };
   try {
-    const run = await compiler.run(`#line 1 "${filename}"\n${code}`, '', { compileArgs: COMPILE_ARGS });
+    const run = await compiler.run(`#line 1 "${filename}"\n${code}`, input, { compileArgs: COMPILE_ARGS });
     if (run.errors.length) return { state: 'error', output: run.errors.join('\n') };
     return { state: 'ran', output: run.output, exitCode: run.exitCode, ms: Math.round(run.runMs ?? 0) };
   } catch (error) {
