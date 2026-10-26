@@ -7,7 +7,7 @@ import { PROBLEMS } from './problems.js';
  * full checklist. Names in the harness start with trainer_ / TRAINER_ to
  * avoid clashing with learner code.
  * ------------------------------------------------------------------------- */
-export const CHECKS = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
+const CHECKS = Object.fromEntries(PROBLEMS.map((p) => [p.id, p]));
 
 const stripComments = (code) => code.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
@@ -53,7 +53,7 @@ ${lines.join('\n')}
    and line numbers, matching the editor gutter. The learner's own main (if
    any) is renamed so it does not clash with the checker's; runProgram runs
    it separately. */
-export function makeSource(exercise, filename, code) {
+function makeSource(exercise, filename, code) {
   const spec = CHECKS[exercise];
   if (!spec) throw new Error('Unknown exercise.');
   const learner = `#define main learner_demo_main\n#line 1 "${filename}"\n${code}\n#undef main`;
@@ -61,7 +61,7 @@ export function makeSource(exercise, filename, code) {
 }
 
 /* Read PASS/FAIL lines into a map of label -> 'pass' | 'fail'. */
-export function readResults(output) {
+function readResults(output) {
   const seen = new Map();
   for (const line of output.split('\n')) {
     const m = /^(PASS|FAIL): (.*)$/.exec(line);
