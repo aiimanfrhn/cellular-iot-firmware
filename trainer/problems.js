@@ -23,7 +23,7 @@ export const CHECKER_VERSION = 3;
 
 export const TOPICS = [
   'Bits and registers', 'Memory and pointers', 'Lists and strings', 'Data and protocols',
-  'Networking', 'Platform and hardware', 'State machines',
+  'Math and signal processing', 'Networking', 'Platform and hardware', 'State machines',
 ];
 
 export const PROBLEMS = [
@@ -197,6 +197,271 @@ uint32_t swap_bytes32(uint32_t x)
       ['swapping twice gives the original', 'swap_bytes32(swap_bytes32(0xCAFEF00Du)) == 0xCAFEF00Du'],
     ],
     forbid: [['no byte-swap or bit-reverse built-ins', /__builtin_(bswap|bitreverse)/]],
+  },
+  {
+    id: 'bcd', topic: 'Bits and registers', title: 'BCD for an RTC chip', summary: 'Binary to packed BCD and back',
+    difficulty: 'Easy', minutes: 10, filename: 'bcd.c',
+    description: 'Real-time clock chips such as the DS1307 and DS3231 store seconds, minutes and hours as packed BCD: one decimal digit per nibble, so 45 seconds reads back as 0x45, not 0x2D. Write the two conversions an RTC driver needs, plus a check that rejects a byte that is not valid BCD, such as a value read from a chip that was never initialised.',
+    requirements: '<ul><li><code>bin_to_bcd</code> converts 0 to 99 into packed BCD: 45 becomes <code>0x45</code>. You may assume <code>value &lt;= 99</code>.</li><li><code>bcd_to_bin</code> converts packed BCD back: <code>0x59</code> becomes 59. You may assume the input is valid BCD.</li><li><code>bcd_is_valid</code> returns true only when both nibbles are 0 to 9, so <code>0x5A</code> and <code>0xA0</code> are rejected.</li></ul>',
+    followups: [
+      'Why do RTC chips store time in BCD rather than plain binary?',
+      'On a DS1307, bit 7 of the seconds register is the clock-halt flag. What happens if you convert the raw register without masking it, and how do you write the seconds back without stopping the clock?',
+      'How would you add two packed BCD numbers, for example <code>0x38 + 0x45</code>, and get <code>0x83</code>? What does the "decimal adjust" step do?',
+    ],
+    starter: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+/* Convert value (0..99) to packed BCD: 45 -> 0x45. */
+uint8_t bin_to_bcd(uint8_t value)
+{
+    /* TODO */
+    (void)value;
+    return 0u;
+}
+
+/* Convert packed BCD to binary: 0x45 -> 45. */
+uint8_t bcd_to_bin(uint8_t bcd)
+{
+    /* TODO */
+    (void)bcd;
+    return 0u;
+}
+
+/* Return true when both nibbles of bcd are decimal digits (0..9). */
+bool bcd_is_valid(uint8_t bcd)
+{
+    /* TODO */
+    (void)bcd;
+    return false;
+}
+`,
+    prelude: C`
+static int trainer_round_trip(void) {
+    for (unsigned v = 0u; v <= 99u; v++) {
+        uint8_t b = bin_to_bcd((uint8_t)v);
+        if (!bcd_is_valid(b) || bcd_to_bin(b) != v || (b >> 4) != v / 10u || (b & 0x0Fu) != v % 10u) return 0;
+    }
+    return 1;
+}
+static int trainer_valid_count(void) {
+    unsigned valid = 0u;
+    for (unsigned b = 0u; b <= 0xFFu; b++) if (bcd_is_valid((uint8_t)b)) valid++;
+    return valid == 100u;
+}
+`,
+    checks: [
+      ['0 converts to 0x00', 'bin_to_bcd(0u) == 0x00u'],
+      ['9 converts to 0x09', 'bin_to_bcd(9u) == 0x09u'],
+      ['10 converts to 0x10', 'bin_to_bcd(10u) == 0x10u'],
+      ['45 converts to 0x45', 'bin_to_bcd(45u) == 0x45u'],
+      ['99 converts to 0x99', 'bin_to_bcd(99u) == 0x99u'],
+      ['0x59 converts to 59', 'bcd_to_bin(0x59u) == 59u'],
+      ['0x10 converts to 10', 'bcd_to_bin(0x10u) == 10u'],
+      ['0x99 converts to 99', 'bcd_to_bin(0x99u) == 99u'],
+      ['every value 0 to 99 round-trips', 'trainer_round_trip()'],
+      ['0x00, 0x59 and 0x99 are valid BCD', 'bcd_is_valid(0x00u) && bcd_is_valid(0x59u) && bcd_is_valid(0x99u)'],
+      ['a low nibble above 9 is invalid', '!bcd_is_valid(0x5Au) && !bcd_is_valid(0x0Fu)'],
+      ['a high nibble above 9 is invalid', '!bcd_is_valid(0xA0u) && !bcd_is_valid(0xFFu)'],
+      ['exactly 100 of the 256 byte values are valid', 'trainer_valid_count()'],
+    ],
+  },
+  {
+    id: 'highest_bit', topic: 'Bits and registers', title: 'Highest set bit and next power of two', summary: 'Find MSB, round up to 2^n',
+    difficulty: 'Medium', minutes: 15, filename: 'highest_bit.c',
+    description: 'Sizing a buffer or a hash table to the next power of two, picking a clock prescaler, or finding the highest-priority pending interrupt all come down to locating the most significant 1 bit. Implement both helpers without compiler built-ins, and pin down the edge cases at 0 and at the top of the range.',
+    requirements: '<ul><li><code>highest_set_bit</code> returns the index (0 to 31) of the most significant 1 bit in <code>x</code>, or -1 when <code>x</code> is 0.</li><li><code>next_power_of_two</code> returns the smallest power of two that is <code>&gt;= x</code>: 5 gives 8, 8 gives 8.</li><li>Defined edge cases: <code>next_power_of_two(0)</code> returns 1, and any <code>x</code> above <code>0x80000000</code> returns 0, because the answer does not fit in 32 bits.</li><li>Do not use compiler built-ins such as <code>__builtin_clz</code>.</li></ul>',
+    followups: [
+      'Your loop checks up to 32 bits. Can you find the highest set bit in exactly 5 steps with a binary search on halves?',
+      'Explain the bit-smearing trick: <code>x--; x |= x &gt;&gt; 1; x |= x &gt;&gt; 2; ... x++;</code>. Why the <code>x--</code>, and what happens at 0?',
+      'ARM has <code>CLZ</code> and RISC-V Zbb has <code>clz</code>. How do they relate to this function, and how do RTOS schedulers use them to pick the highest-priority ready task?',
+    ],
+    starter: C`
+#include <stdint.h>
+
+/* Return the index (0..31) of the most significant 1 bit in x, or -1 for 0. */
+int highest_set_bit(uint32_t x)
+{
+    /* TODO */
+    (void)x;
+    return -1;
+}
+
+/* Return the smallest power of two >= x. Returns 1 for 0, and 0 when x is
+   above 0x80000000 (the result would not fit in 32 bits). */
+uint32_t next_power_of_two(uint32_t x)
+{
+    /* TODO */
+    return x;
+}
+`,
+    prelude: C`
+static int trainer_every_single_bit(void) {
+    for (int i = 0; i < 32; i++) {
+        uint32_t bit = UINT32_C(1) << i;
+        if (highest_set_bit(bit) != i || highest_set_bit(bit | 1u) != i) return 0;
+        if (i > 0 && highest_set_bit(bit - 1u) != i - 1) return 0;
+    }
+    return 1;
+}
+static int trainer_every_power(void) {
+    for (int i = 0; i < 32; i++) {
+        uint32_t p = UINT32_C(1) << i;
+        if (next_power_of_two(p) != p) return 0;
+        if (i < 31 && next_power_of_two(p + 1u) != p << 1) return 0;
+    }
+    return 1;
+}
+`,
+    checks: [
+      ['0 has no set bit: -1', 'highest_set_bit(0u) == -1'],
+      ['1 has its highest bit at 0', 'highest_set_bit(1u) == 0'],
+      ['0x80000000 has its highest bit at 31', 'highest_set_bit(0x80000000u) == 31'],
+      ['all ones has its highest bit at 31', 'highest_set_bit(0xFFFFFFFFu) == 31'],
+      ['0x00012345 has its highest bit at 16', 'highest_set_bit(0x00012345u) == 16'],
+      ['every bit position 0 to 31 is found', 'trainer_every_single_bit()'],
+      ['next power of two of 0 is 1', 'next_power_of_two(0u) == 1u'],
+      ['next power of two of 1 is 1', 'next_power_of_two(1u) == 1u'],
+      ['3 rounds up to 4 and 5 to 8', 'next_power_of_two(3u) == 4u && next_power_of_two(5u) == 8u'],
+      ['1000 rounds up to 1024', 'next_power_of_two(1000u) == 1024u'],
+      ['powers of two are unchanged, one more doubles', 'trainer_every_power()'],
+      ['0x80000000 stays 0x80000000', 'next_power_of_two(0x80000000u) == 0x80000000u'],
+      ['above 0x80000000 returns 0', 'next_power_of_two(0x80000001u) == 0u && next_power_of_two(0xFFFFFFFFu) == 0u'],
+    ],
+    forbid: [['no compiler built-ins such as __builtin_clz', /__builtin_/]],
+  },
+  {
+    id: 'bitmap_alloc', topic: 'Bits and registers', title: 'Bitmap block allocator', summary: 'One bit per block',
+    difficulty: 'Medium', minutes: 20, filename: 'bitmap_alloc.c',
+    description: 'Flash sector managers, DMA descriptor pools and file systems often track 64 equal blocks with one bit each instead of a free list: the state fits in two words and is easy to save or inspect in a debugger. Implement a 64-block allocator over an array of uint32_t words, where a 1 bit means the block is in use.',
+    requirements: '<ul><li>Block <code>n</code> is bit <code>n % 32</code> of <code>words[n / 32]</code>; 1 means used.</li><li><code>bm_init</code> marks every block free. <code>bm_alloc</code> marks the lowest-numbered free block used and returns its index, or -1 when all 64 are used.</li><li><code>bm_free</code> returns false, and changes nothing, when <code>block</code> is out of range (below 0 or above 63) or already free, which catches a double free.</li><li><code>bm_count_used</code> returns how many blocks are in use. Keep the struct and the function signatures.</li></ul>',
+    followups: [
+      'Instead of testing bits one by one, how can you find the lowest 0 bit of a word in one expression? (Hint: <code>~w &amp; (w + 1)</code>.)',
+      'Two RTOS tasks call <code>bm_alloc</code> at the same time. What can go wrong, and how would you fix it with and without disabling interrupts?',
+      'How would you allocate <em>n</em> contiguous blocks, for example a 3-sector flash write?',
+    ],
+    starter: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+#define BM_BLOCKS 64
+#define BM_WORD_BITS 32
+
+/* Block n is bit (n % 32) of words[n / 32]; 1 = used, 0 = free. */
+typedef struct Bitmap {
+    uint32_t words[BM_BLOCKS / BM_WORD_BITS];
+} Bitmap;
+
+/* Mark every block free. */
+void bm_init(Bitmap *bm)
+{
+    /* TODO */
+    (void)bm;
+}
+
+/* Mark the lowest free block used and return its index, or -1 when full. */
+int bm_alloc(Bitmap *bm)
+{
+    /* TODO */
+    (void)bm;
+    return -1;
+}
+
+/* Free a block. Return false if block is out of range or already free. */
+bool bm_free(Bitmap *bm, int block)
+{
+    /* TODO */
+    (void)bm;
+    (void)block;
+    return false;
+}
+
+/* Return the number of used blocks. */
+int bm_count_used(const Bitmap *bm)
+{
+    /* TODO */
+    (void)bm;
+    return 0;
+}
+`,
+    prelude: C`
+static int trainer_init_clears(void) {
+    Bitmap bm;
+    memset(&bm, 0xA5, sizeof bm);
+    bm_init(&bm);
+    return bm_count_used(&bm) == 0 && bm_alloc(&bm) == 0;
+}
+static int trainer_in_order(void) {
+    Bitmap bm; bm_init(&bm);
+    return bm_alloc(&bm) == 0 && bm_alloc(&bm) == 1 && bm_alloc(&bm) == 2 && bm_count_used(&bm) == 3;
+}
+static int trainer_reuse(void) {
+    Bitmap bm; bm_init(&bm);
+    for (int i = 0; i < 5; i++) if (bm_alloc(&bm) != i) return 0;
+    if (!bm_free(&bm, 2) || bm_count_used(&bm) != 4) return 0;
+    return bm_alloc(&bm) == 2 && bm_alloc(&bm) == 5;
+}
+static int trainer_lowest_first(void) {
+    Bitmap bm; bm_init(&bm);
+    for (int i = 0; i < 6; i++) if (bm_alloc(&bm) != i) return 0;
+    if (!bm_free(&bm, 4) || !bm_free(&bm, 1)) return 0;
+    return bm_alloc(&bm) == 1 && bm_alloc(&bm) == 4 && bm_alloc(&bm) == 6;
+}
+static int trainer_fill(Bitmap *bm) {
+    bm_init(bm);
+    for (int i = 0; i < 64; i++) if (bm_alloc(bm) != i) return 0;
+    return 1;
+}
+static int trainer_full(void) {
+    Bitmap bm;
+    return trainer_fill(&bm) && bm_alloc(&bm) == -1 && bm_alloc(&bm) == -1 && bm_count_used(&bm) == 64;
+}
+static int trainer_free_last(void) {
+    Bitmap bm;
+    if (!trainer_fill(&bm) || !bm_free(&bm, 63)) return 0;
+    return bm_count_used(&bm) == 63 && bm_alloc(&bm) == 63 && bm_alloc(&bm) == -1;
+}
+static int trainer_double_free(void) {
+    Bitmap bm; bm_init(&bm);
+    for (int i = 0; i < 8; i++) if (bm_alloc(&bm) != i) return 0;
+    return bm_free(&bm, 5) && !bm_free(&bm, 5) && bm_count_used(&bm) == 7;
+}
+static int trainer_never_allocated(void) {
+    Bitmap bm; bm_init(&bm);
+    if (bm_alloc(&bm) != 0) return 0;
+    return !bm_free(&bm, 10) && !bm_free(&bm, 40) && bm_count_used(&bm) == 1;
+}
+static int trainer_cross_word(void) {
+    Bitmap bm; bm_init(&bm);
+    for (int i = 0; i < 33; i++) if (bm_alloc(&bm) != i) return 0;
+    return bm.words[0] == 0xFFFFFFFFu && bm.words[1] == 1u && bm_count_used(&bm) == 33;
+}
+static int trainer_free_cross_word(void) {
+    Bitmap bm; bm_init(&bm);
+    for (int i = 0; i < 34; i++) if (bm_alloc(&bm) != i) return 0;
+    if (!bm_free(&bm, 32) || !bm_free(&bm, 31)) return 0;
+    if (bm.words[0] != 0x7FFFFFFFu || bm.words[1] != 2u) return 0;
+    return bm_alloc(&bm) == 31 && bm_alloc(&bm) == 32 && bm_alloc(&bm) == 34;
+}
+static int trainer_out_of_range(void) {
+    Bitmap bm;
+    if (!trainer_fill(&bm)) return 0;
+    return !bm_free(&bm, -1) && !bm_free(&bm, 64) && !bm_free(&bm, 1000) && bm_count_used(&bm) == 64;
+}
+`,
+    checks: [
+      ['bm_init frees every block', 'trainer_init_clears()'],
+      ['allocates 0, 1, 2 in order', 'trainer_in_order()'],
+      ['a freed block is reused', 'trainer_reuse()'],
+      ['the lowest free block is always chosen', 'trainer_lowest_first()'],
+      ['all 64 blocks, then -1 when full', 'trainer_full()'],
+      ['block 63 can be freed and reallocated', 'trainer_free_last()'],
+      ['double free is rejected', 'trainer_double_free()'],
+      ['freeing a never-allocated block is rejected', 'trainer_never_allocated()'],
+      ['block 32 is bit 0 of the second word', 'trainer_cross_word()'],
+      ['blocks 31 and 32 free and reallocate across the word boundary', 'trainer_free_cross_word()'],
+      ['out-of-range blocks -1 and 64 are rejected', 'trainer_out_of_range()'],
+    ],
   },
 
   /* ==================================================== Memory and pointers */
@@ -412,6 +677,118 @@ static int trainer_reinit(void) {
       ['pool_init resets a used pool', 'trainer_reinit()'],
     ],
     forbid: [['does not call malloc or free', /\b(malloc|calloc|realloc|free)\s*\(/]],
+  },
+  {
+    id: 'aligned_alloc', topic: 'Memory and pointers', title: 'Aligned malloc and free', summary: 'Over-allocate, stash the pointer',
+    difficulty: 'Medium', minutes: 20, filename: 'aligned_alloc.c',
+    description: 'A classic: DMA engines, cache maintenance and some peripherals need buffers aligned to 32, 64 or even 4096 bytes, but malloc only promises alignment for ordinary types. Build aligned_malloc and aligned_free on top of malloc and free by over-allocating, rounding the address up, and storing the original malloc pointer just before the block you return so aligned_free can find it.',
+    requirements: '<ul><li><code>aligned_malloc</code> returns a block of at least <code>size</code> usable bytes whose address is a multiple of <code>alignment</code>, or <code>NULL</code> if malloc fails.</li><li>Return <code>NULL</code> when <code>alignment</code> is 0 or not a power of two, and when <code>size</code> plus your overhead would overflow <code>size_t</code>.</li><li>Small alignments such as 1 and 2 must work too, and the stored pointer must itself be correctly aligned (the checker traps misaligned accesses).</li><li><code>aligned_free</code> releases a block from <code>aligned_malloc</code>; <code>aligned_free(NULL)</code> does nothing.</li><li>Use <code>uintptr_t</code> for address arithmetic. Do not call <code>aligned_alloc</code>, <code>posix_memalign</code> or <code>memalign</code>.</li></ul>',
+    followups: [
+      'Why must the original pointer be stored, and why just before the returned block rather than in a global table?',
+      'How many bytes does each allocation waste in the worst case? How would you reduce that for a 4096-byte alignment?',
+      'A DMA buffer is aligned to 32 bytes but its size is 40. Why can cache invalidation on a Cortex-M7 still corrupt a neighbouring variable, and how do you size the buffer to avoid it?',
+    ],
+    starter: C`
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+/* Return size bytes aligned to alignment (a power of two), or NULL. */
+void *aligned_malloc(size_t size, size_t alignment)
+{
+    /* TODO: over-allocate, round up, store the original pointer before the block */
+    (void)size;
+    (void)alignment;
+    return NULL;
+}
+
+/* Free a block returned by aligned_malloc. NULL is allowed. */
+void aligned_free(void *p)
+{
+    /* TODO: recover the original pointer and free it */
+    (void)p;
+}
+`,
+    prelude: C`
+#include <stdlib.h>
+static int trainer_try(size_t size, size_t alignment) {
+    unsigned char *p = aligned_malloc(size, alignment);
+    if (p == NULL || ((uintptr_t)p & (alignment - 1u)) != 0u) { aligned_free(p); return 0; }
+    for (size_t i = 0; i < size; i++) p[i] = (unsigned char)(i * 7u + 3u);
+    for (size_t i = 0; i < size; i++) if (p[i] != (unsigned char)(i * 7u + 3u)) { aligned_free(p); return 0; }
+    aligned_free(p);
+    return 1;
+}
+static int trainer_small_alignments(void) {
+    return trainer_try(13u, 1u) && trainer_try(13u, 2u) && trainer_try(1u, 4u);
+}
+static int trainer_no_overlap(void) {
+    unsigned char *a = aligned_malloc(64u, 64u), *b = aligned_malloc(64u, 64u);
+    int ok = a != NULL && b != NULL;
+    if (ok) {
+        memset(a, 0x11, 64u); memset(b, 0x22, 64u);
+        for (size_t i = 0; i < 64u; i++) if (a[i] != 0x11u || b[i] != 0x22u) ok = 0;
+    }
+    aligned_free(a); aligned_free(b);
+    return ok;
+}
+static int trainer_cycles(void) {
+    unsigned char *live[8] = {0};
+    size_t sizes[8] = {0};
+    int ok = 1;
+    for (unsigned i = 0u; i < 2000u && ok; i++) {
+        unsigned slot = i % 8u;
+        if (live[slot] && (live[slot][0] != slot || live[slot][sizes[slot] - 1u] != slot)) ok = 0;
+        aligned_free(live[slot]);
+        size_t size = (size_t)(i * 37u) % 500u + 1u, alignment = (size_t)1 << (i % 13u);
+        live[slot] = aligned_malloc(size, alignment);
+        sizes[slot] = size;
+        if (live[slot] == NULL || ((uintptr_t)live[slot] & (alignment - 1u)) != 0u) ok = 0;
+        else memset(live[slot], (int)slot, size);
+    }
+    for (unsigned s = 0u; s < 8u; s++) aligned_free(live[s]);
+    return ok;
+}
+static int trainer_releases(void) {
+    /* 4096 x 1 MiB is far more than a 32-bit address space: this only
+       passes if aligned_free really gives the memory back. */
+    for (unsigned i = 0u; i < 4096u; i++) {
+        void *p = aligned_malloc((size_t)1 << 20, 4096u);
+        if (p == NULL) return 0;
+        aligned_free(p);
+    }
+    return 1;
+}
+static int trainer_bad_alignment(void) {
+    return aligned_malloc(16u, 3u) == NULL && aligned_malloc(16u, 24u) == NULL && aligned_malloc(16u, 100u) == NULL;
+}
+static int trainer_overflow(void) {
+    void *p = aligned_malloc(SIZE_MAX, 16u), *q = aligned_malloc(SIZE_MAX - 4u, 64u);
+    int ok = p == NULL && q == NULL;
+    aligned_free(p); aligned_free(q);
+    return ok;
+}
+static int trainer_free_null(void) {
+    aligned_free(NULL);
+    return 1;
+}
+`,
+    checks: [
+      ['8-byte alignment, all 100 bytes writable', 'trainer_try(100u, 8u)'],
+      ['16-byte alignment', 'trainer_try(1u, 16u) && trainer_try(33u, 16u)'],
+      ['64-byte (cache line) alignment', 'trainer_try(1000u, 64u)'],
+      ['256-byte alignment', 'trainer_try(300u, 256u)'],
+      ['4096-byte (page) alignment, all 5000 bytes writable', 'trainer_try(5000u, 4096u)'],
+      ['alignments 1, 2 and 4 work too', 'trainer_small_alignments()'],
+      ['two live blocks do not overlap', 'trainer_no_overlap()'],
+      ['2000 mixed alloc and free cycles keep data intact', 'trainer_cycles()'],
+      ['NULL for alignment 0', 'aligned_malloc(16u, 0u) == NULL'],
+      ['NULL for alignments 3, 24 and 100', 'trainer_bad_alignment()'],
+      ['NULL when size plus overhead overflows', 'trainer_overflow()'],
+      ['aligned_free(NULL) is safe', 'trainer_free_null()'],
+      ['aligned_free really releases memory', 'trainer_releases()'],
+    ],
+    forbid: [['does not call aligned_alloc, posix_memalign or memalign', /\b(aligned_alloc|posix_memalign|memalign|_aligned_malloc)\s*\(/]],
   },
 
   /* ====================================================== Lists and strings */
@@ -655,6 +1032,121 @@ static int trainer_split(const char *text, int max, int want, const char *w0, co
     ],
     forbid: [['does not use strtok or strsep', /\b(strtok|strtok_r|strsep)\s*\(/]],
   },
+  {
+    id: 'itoa', topic: 'Lists and strings', title: 'Integer to string', summary: 'itoa in any base, INT_MIN included',
+    difficulty: 'Medium', minutes: 20, filename: 'itoa.c',
+    description: 'Small targets often drop printf to save flash, so firmware ends up formatting numbers by hand for logs, CLI output and AT commands. Write an itoa that handles any base from 2 to 16, never overruns the caller\'s buffer, and gets the one value everybody forgets right: INT_MIN.',
+    requirements: '<ul><li>Write <code>value</code> in <code>base</code> 2 to 16 using digits <code>0-9</code> and lowercase <code>a-f</code>, with a leading <code>-</code> for negative values in every base (so -255 in base 16 is <code>-ff</code>). No prefix such as <code>0x</code>, no leading zeros.</li><li>On success write the NUL-terminated string to <code>buf</code> and return its length, not counting the NUL.</li><li>Return <code>0</code> if <code>base</code> is outside 2 to 16 or the string plus its NUL does not fit in <code>size</code> bytes. On failure, if <code>size &gt; 0</code>, <code>buf</code> holds an empty string; with <code>size == 0</code> nothing is written. Never write at or past <code>buf[size]</code>.</li><li><code>INT_MIN</code> must work. Negating it as an <code>int</code> is signed overflow, which the checker traps.</li><li>Do not use <code>sprintf</code>, <code>snprintf</code> or their <code>v</code> variants.</li></ul>',
+    followups: [
+      'Why is <code>-value</code> undefined for <code>INT_MIN</code>, and why does converting to <code>unsigned</code> first fix it?',
+      'Digits come out least significant first. Compare reversing in place with filling a scratch buffer from the end. Which uses less stack?',
+      'On a Cortex-M0 there is no hardware divide. How would you print a <code>uint32_t</code> in decimal without calling a division routine per digit?',
+    ],
+    starter: C`
+#include <limits.h>
+#include <stddef.h>
+
+/* Write value in base 2..16 to buf, a buffer of size bytes. Return the number
+   of characters written (not counting the NUL), or 0 if base is invalid or the
+   result does not fit; then buf holds "" when size > 0. */
+size_t int_to_str(int value, unsigned base, char *buf, size_t size)
+{
+    /* TODO */
+    (void)value;
+    (void)base;
+    (void)buf;
+    (void)size;
+    return 0u;
+}
+`,
+    prelude: C`
+#include <limits.h>
+/* Format into a 40-byte buffer filled with '#', then check the return value,
+   the text, and that nothing at or past buf[size] was written. */
+static int trainer_itoa(int value, unsigned base, size_t size, const char *want, size_t ret) {
+    char buf[40];
+    memset(buf, '#', sizeof buf);
+    if (int_to_str(value, base, buf, size) != ret) return 0;
+    for (size_t i = size; i < sizeof buf; i++) if (buf[i] != '#') return 0;
+    if (size == 0u) return 1;
+    return strcmp(buf, want) == 0;
+}
+`,
+    checks: [
+      ['zero is 0', 'trainer_itoa(0, 10u, 16u, "0", 1u)'],
+      ['positive decimal', 'trainer_itoa(1234, 10u, 16u, "1234", 4u)'],
+      ['negative decimal', 'trainer_itoa(-1234, 10u, 16u, "-1234", 5u)'],
+      ['INT_MAX in decimal', 'trainer_itoa(INT_MAX, 10u, 16u, "2147483647", 10u)'],
+      ['INT_MIN in decimal', 'trainer_itoa(INT_MIN, 10u, 16u, "-2147483648", 11u)'],
+      ['hex uses lowercase digits', 'trainer_itoa(255, 16u, 16u, "ff", 2u) && trainer_itoa(0xBEEF, 16u, 16u, "beef", 4u)'],
+      ['negative hex keeps the minus sign', 'trainer_itoa(-255, 16u, 16u, "-ff", 3u)'],
+      ['INT_MAX and INT_MIN in hex', 'trainer_itoa(INT_MAX, 16u, 16u, "7fffffff", 8u) && trainer_itoa(INT_MIN, 16u, 16u, "-80000000", 9u)'],
+      ['binary', 'trainer_itoa(5, 2u, 16u, "101", 3u) && trainer_itoa(-5, 2u, 16u, "-101", 4u) && trainer_itoa(0, 2u, 16u, "0", 1u)'],
+      ['INT_MIN in binary', 'trainer_itoa(INT_MIN, 2u, 40u, "-10000000000000000000000000000000", 33u)'],
+      ['exact fit: size is length + 1', 'trainer_itoa(1234, 10u, 5u, "1234", 4u) && trainer_itoa(-42, 10u, 4u, "-42", 3u)'],
+      ['one byte short fails with an empty string', 'trainer_itoa(1234, 10u, 4u, "", 0u) && trainer_itoa(-42, 10u, 3u, "", 0u)'],
+      ['size 1 and size 0', 'trainer_itoa(7, 10u, 1u, "", 0u) && trainer_itoa(7, 10u, 0u, "", 0u)'],
+      ['invalid bases 0, 1 and 17 fail', 'trainer_itoa(10, 1u, 16u, "", 0u) && trainer_itoa(10, 17u, 16u, "", 0u) && trainer_itoa(10, 0u, 16u, "", 0u)'],
+    ],
+    forbid: [['does not use sprintf or snprintf', /\b(sprintf|snprintf|vsprintf|vsnprintf)\s*\(/]],
+  },
+  {
+    id: 'reverse_words', topic: 'Lists and strings', title: 'Reverse the words', summary: 'In place, O(1) extra space',
+    difficulty: 'Easy', minutes: 15, filename: 'reverse_words.c',
+    description: 'A favourite whiteboard question: reverse the order of the words in a sentence, so "the quick fox" becomes "fox quick the". The catch is that you must do it in place with constant extra memory, which rules out splitting into an array of words or building a second string.',
+    requirements: '<ul><li><code>s</code> is a NUL-terminated string of words separated by single spaces, with no leading or trailing spaces. It may be empty.</li><li>Rearrange it in place so the words appear in reverse order; the letters inside each word keep their order.</li><li>The length of the string does not change, and nothing past its NUL is written.</li><li>Use O(1) extra space: no second buffer sized to the input, and no <code>malloc</code>.</li></ul>',
+    followups: [
+      'Your solution reverses each character twice. What is its time complexity, and why is that still optimal?',
+      'How does your code behave with multiple spaces between words, or leading and trailing spaces? What would you change to collapse them?',
+      'How would you rotate an array left by <code>k</code> places in place? (Hint: the same trick.)',
+    ],
+    starter: C`
+#include <stddef.h>
+#include <string.h>
+
+/* Reverse the order of the space-separated words in s, in place. */
+void reverse_words(char *s)
+{
+    /* TODO */
+    (void)s;
+}
+`,
+    prelude: C`
+/* Reverse a copy of text in a 64-byte buffer filled with '#', then compare the
+   result and check that nothing past the NUL was written. */
+static int trainer_rev(const char *text, const char *want) {
+    char buf[64];
+    size_t n = strlen(text);
+    memset(buf, '#', sizeof buf);
+    memcpy(buf, text, n + 1u);
+    reverse_words(buf);
+    if (strcmp(buf, want) != 0) return 0;
+    for (size_t i = n + 1u; i < sizeof buf; i++) if (buf[i] != '#') return 0;
+    return 1;
+}
+static int trainer_len_kept(const char *text) {
+    char buf[64];
+    size_t n = strlen(text);
+    memcpy(buf, text, n + 1u);
+    reverse_words(buf);
+    return strlen(buf) == n;
+}
+`,
+    checks: [
+      ['one word is unchanged', 'trainer_rev("hello", "hello")'],
+      ['two words swap', 'trainer_rev("hello world", "world hello")'],
+      ['the quick fox', 'trainer_rev("the quick fox", "fox quick the")'],
+      ['several words', 'trainer_rev("show ip route vrf mgmt", "mgmt vrf route ip show")'],
+      ['words of different lengths', 'trainer_rev("a bb ccc dddd", "dddd ccc bb a")'],
+      ['an empty string stays empty', 'trainer_rev("", "")'],
+      ['a single character', 'trainer_rev("x", "x")'],
+      ['single-character words', 'trainer_rev("a b c d", "d c b a")'],
+      ['letters inside words keep their order', 'trainer_rev("ab cd", "cd ab")'],
+      ['repeated words', 'trainer_rev("go go stop", "stop go go")'],
+      ['total length is preserved', 'trainer_len_kept("interface gigabit ethernet one")'],
+    ],
+    forbid: [['does not allocate memory', /\b(malloc|calloc|realloc|alloca|strdup)\s*\(/]],
+  },
 
   /* ===================================================== Data and protocols */
   {
@@ -886,6 +1378,258 @@ static int trainer_bad(const char *s) { uint32_t v = 12345u; return !parse_u32(s
       ['rejects spaces', 'trainer_bad(" 7") && trainer_bad("7 ")'],
     ],
     forbid: [['does not use library number parsers', /\b(strto\w+|atoi|atol|atoll|sscanf)\s*\(/]],
+  },
+
+  /* ============================================ Math and signal processing */
+  {
+    id: 'saturate', topic: 'Math and signal processing', title: 'Saturating and Q15 arithmetic', summary: 'Clamp, do not wrap',
+    difficulty: 'Medium', minutes: 20, filename: 'saturate.c',
+    description: 'Audio codecs, motor control and sensor filters run on 16-bit fixed-point samples. When a sum overflows, wrapping turns a loud positive peak into a full-scale negative one: an audible crack, or a control loop driving hard the wrong way. Write the saturating add and subtract that DSP code relies on, and a Q15 fractional multiply, where 16-bit values represent fractions from -1 to just under +1.',
+    requirements: '<ul><li><code>sat_add16</code> and <code>sat_sub16</code> return <code>a + b</code> and <code>a - b</code>, clamped to the <code>int16_t</code> range: results above <code>INT16_MAX</code> become <code>INT16_MAX</code>, results below <code>INT16_MIN</code> become <code>INT16_MIN</code>.</li><li>In Q15 an <code>int16_t</code> <code>v</code> stands for <code>v / 32768</code>, so 16384 is 0.5 and -32768 is -1.0. <code>q15_mul</code> returns <code>a &times; b</code> in Q15, rounded to the nearest Q15 value with exact halves rounded up (toward +infinity).</li><li>The only Q15 product that does not fit is -1 &times; -1 = +1.0; it saturates to <code>32767</code>.</li><li>No signed overflow anywhere: the checker traps it. You may assume <code>&gt;&gt;</code> on a negative <code>int32_t</code> is an arithmetic shift, as it is on GCC, Clang and Arm compilers.</li></ul>',
+    followups: [
+      'Why do audio and control loops saturate instead of wrapping? What does a wrapped overflow sound like, or do to a PID output?',
+      'Arm has <code>QADD16</code>, <code>QSUB16</code> and <code>SSAT</code>, and sets the sticky Q flag on saturation. How would you use them from C, and why might you check the Q flag?',
+      'What does Q15 mean, and why is the product of two Q15 numbers Q30? When would you choose Q31 or floating point instead?',
+    ],
+    starter: C`
+#include <stdint.h>
+
+/* Return a + b clamped to the int16_t range. */
+int16_t sat_add16(int16_t a, int16_t b)
+{
+    /* TODO */
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+/* Return a - b clamped to the int16_t range. */
+int16_t sat_sub16(int16_t a, int16_t b)
+{
+    /* TODO */
+    (void)a;
+    (void)b;
+    return 0;
+}
+
+/* Return a * b in Q15, rounded to nearest (halves up), saturating -1 * -1. */
+int16_t q15_mul(int16_t a, int16_t b)
+{
+    /* TODO */
+    (void)a;
+    (void)b;
+    return 0;
+}
+`,
+    prelude: C`
+`,
+    checks: [
+      ['add without overflow', 'sat_add16(1000, 2000) == 3000 && sat_add16(-1000, 500) == -500'],
+      ['add clamps at INT16_MAX', 'sat_add16(30000, 10000) == INT16_MAX && sat_add16(INT16_MAX, 1) == INT16_MAX'],
+      ['add clamps at INT16_MIN', 'sat_add16(-30000, -10000) == INT16_MIN && sat_add16(INT16_MIN, -1) == INT16_MIN'],
+      ['add of opposite extremes does not clamp', 'sat_add16(INT16_MAX, INT16_MIN) == -1'],
+      ['subtract without overflow', 'sat_sub16(5000, 7000) == -2000 && sat_sub16(-5000, -7000) == 2000'],
+      ['subtract clamps at INT16_MAX', 'sat_sub16(INT16_MAX, -1) == INT16_MAX && sat_sub16(30000, -10000) == INT16_MAX'],
+      ['0 - INT16_MIN clamps to INT16_MAX', 'sat_sub16(0, INT16_MIN) == INT16_MAX'],
+      ['INT16_MIN - 1 clamps to INT16_MIN', 'sat_sub16(INT16_MIN, 1) == INT16_MIN && sat_sub16(-30000, 10000) == INT16_MIN'],
+      ['0.5 x 0.5 = 0.25', 'q15_mul(16384, 16384) == 8192'],
+      ['signs: 0.5 x -0.5 and -0.5 x -0.5', 'q15_mul(16384, -16384) == -8192 && q15_mul(-16384, -16384) == 8192'],
+      ['-1 x -1 saturates to 32767', 'q15_mul(INT16_MIN, INT16_MIN) == INT16_MAX'],
+      ['-1 x x is -x', 'q15_mul(INT16_MIN, 16384) == -16384 && q15_mul(INT16_MIN, INT16_MAX) == -INT16_MAX'],
+      ['rounds to nearest, halves up', 'q15_mul(1, 16384) == 1 && q15_mul(3, 8192) == 1 && q15_mul(-1, 16384) == 0'],
+      ['negative products round to nearest', 'q15_mul(-3, 8192) == -1 && q15_mul(-1, 8192) == 0'],
+      ['almost 1 squared, and zero', 'q15_mul(INT16_MAX, INT16_MAX) == 32766 && q15_mul(0, INT16_MIN) == 0'],
+    ],
+  },
+  {
+    id: 'moving_average', topic: 'Math and signal processing', title: 'Moving average filter', summary: 'Smooth ADC samples in O(1)',
+    difficulty: 'Easy', minutes: 15, filename: 'moving_average.c',
+    description: 'A 12- or 16-bit ADC reading a battery voltage or a pressure sensor jitters by a few counts from sample to sample. A moving average over the last N samples smooths that out. Keep a running sum so each new sample costs the same small amount of work however long the window is, and do it in integers: many small MCUs have no FPU.',
+    requirements: '<ul><li><code>ma_init</code> resets the filter and sets the window: 1 to <code>MA_MAX_WINDOW</code> (16) samples, fixed until the next init. The struct may hold garbage before init.</li><li><code>ma_add</code> takes one sample and returns the average of the last <code>window</code> samples. Until the window has filled, average over the samples seen so far.</li><li>Round to nearest, halves up: 1 and 2 average to 2. Samples can be anything up to 65535.</li><li>Add the fields you need to the struct. Keep the work per sample constant: do not re-sum the window, and do not use floating point.</li></ul>',
+    followups: [
+      'Why is the running sum O(1) per sample, and what happens to it if a single bit flips in RAM?',
+      'If the window is a power of two, how do you replace the division, and why does that matter on a Cortex-M0?',
+      'An exponential moving average needs no sample buffer at all. How does <code>avg += (sample - avg) &gt;&gt; k</code> compare, and what is the trap with negative numbers and integer precision?',
+    ],
+    starter: C`
+#include <stdint.h>
+
+#define MA_MAX_WINDOW 16u
+
+typedef struct MovingAverage {
+    uint16_t samples[MA_MAX_WINDOW];   /* the most recent samples */
+    uint8_t window;                    /* samples to average, 1..MA_MAX_WINDOW */
+    /* TODO: add the fields you need */
+} MovingAverage;
+
+/* Reset the filter and set the window length (1..MA_MAX_WINDOW). */
+void ma_init(MovingAverage *ma, uint8_t window)
+{
+    /* TODO */
+    (void)ma;
+    (void)window;
+}
+
+/* Add one sample and return the rounded average of the last window samples
+   (or of all samples so far, while the window is still filling). */
+uint16_t ma_add(MovingAverage *ma, uint16_t sample)
+{
+    /* TODO */
+    (void)ma;
+    (void)sample;
+    return 0u;
+}
+`,
+    prelude: C`
+/* Feed in[] to a fresh filter (garbage before init) and compare every output with want[]. */
+static int trainer_run(uint8_t window, const uint16_t *in, const uint16_t *want, size_t n) {
+    MovingAverage ma;
+    memset(&ma, 0xA5, sizeof ma);
+    ma_init(&ma, window);
+    for (size_t i = 0; i < n; i++) {
+        if (ma_add(&ma, in[i]) != want[i]) return 0;
+    }
+    return 1;
+}
+/* Full-scale samples: the sum needs 20 bits. Then let zeros push them out. */
+static int trainer_full_scale(void) {
+    MovingAverage ma;
+    ma_init(&ma, 16u);
+    for (int i = 0; i < 40; i++) {
+        if (ma_add(&ma, 65535u) != 65535u) return 0;
+    }
+    for (uint32_t k = 1u; k <= 16u; k++) {
+        if (ma_add(&ma, 0u) != (uint16_t)(((16u - k) * 65535u + 8u) / 16u)) return 0;
+    }
+    return 1;
+}
+/* Pseudo-random samples checked against a filter that re-sums every time. */
+static int trainer_reference(uint8_t window, unsigned steps) {
+    MovingAverage ma;
+    uint16_t hist[16] = {0};
+    uint32_t seed = 12345u;
+    memset(&ma, 0x5A, sizeof ma);
+    ma_init(&ma, window);
+    for (unsigned i = 0; i < steps; i++) {
+        seed = seed * 1664525u + 1013904223u;
+        uint16_t s = (uint16_t)(seed >> 16);
+        hist[i % window] = s;
+        unsigned have = i + 1u < window ? i + 1u : window;
+        uint32_t sum = 0u;
+        for (unsigned k = 0; k < have; k++) sum += hist[k];
+        if (ma_add(&ma, s) != (sum + have / 2u) / have) return 0;
+    }
+    return 1;
+}
+/* Two filters used in turn must not share state. */
+static int trainer_two_filters(void) {
+    MovingAverage a, b;
+    ma_init(&a, 2u);
+    ma_init(&b, 4u);
+    return ma_add(&a, 100u) == 100u && ma_add(&b, 8u) == 8u
+        && ma_add(&a, 200u) == 150u && ma_add(&b, 0u) == 4u
+        && ma_add(&a, 300u) == 250u && ma_add(&b, 0u) == 3u;
+}
+/* Re-init after use starts over with the new window. */
+static int trainer_reinit(void) {
+    MovingAverage ma;
+    ma_init(&ma, 4u);
+    ma_add(&ma, 1000u);
+    ma_add(&ma, 3000u);
+    ma_init(&ma, 2u);
+    return ma_add(&ma, 10u) == 10u && ma_add(&ma, 20u) == 15u && ma_add(&ma, 30u) == 25u;
+}
+`,
+    checks: [
+      ['the first sample returns itself', 'trainer_run(4u, (const uint16_t[]){1234u}, (const uint16_t[]){1234u}, 1u)'],
+      ['averages what it has while warming up', 'trainer_run(4u, (const uint16_t[]){10u, 20u, 30u}, (const uint16_t[]){10u, 15u, 20u}, 3u)'],
+      ['averages the full window once filled', 'trainer_run(4u, (const uint16_t[]){10u, 20u, 30u, 40u}, (const uint16_t[]){10u, 15u, 20u, 25u}, 4u)'],
+      ['old samples roll out of the window', 'trainer_run(4u, (const uint16_t[]){10u, 20u, 30u, 40u, 50u, 60u}, (const uint16_t[]){10u, 15u, 20u, 25u, 35u, 45u}, 6u) && trainer_run(3u, (const uint16_t[]){100u, 0u, 0u, 0u}, (const uint16_t[]){100u, 50u, 33u, 0u}, 4u)'],
+      ['halves round up', 'trainer_run(2u, (const uint16_t[]){1u, 2u}, (const uint16_t[]){1u, 2u}, 2u) && trainer_run(4u, (const uint16_t[]){10u, 15u}, (const uint16_t[]){10u, 13u}, 2u)'],
+      ['rounds to nearest, not down', 'trainer_run(4u, (const uint16_t[]){0u, 0u, 0u, 3u}, (const uint16_t[]){0u, 0u, 0u, 1u}, 4u) && trainer_run(3u, (const uint16_t[]){1u, 2u, 2u}, (const uint16_t[]){1u, 2u, 2u}, 3u) && trainer_run(3u, (const uint16_t[]){1u, 1u, 2u}, (const uint16_t[]){1u, 1u, 1u}, 3u)'],
+      ['full-scale samples do not overflow the sum', 'trainer_full_scale()'],
+      ['window 1 passes samples straight through', 'trainer_run(1u, (const uint16_t[]){5u, 65535u, 0u, 7u}, (const uint16_t[]){5u, 65535u, 0u, 7u}, 4u)'],
+      ['window 16 matches a re-summing reference', 'trainer_reference(16u, 200u)'],
+      ['window 5 matches a re-summing reference', 'trainer_reference(5u, 200u)'],
+      ['two filters keep separate state', 'trainer_two_filters()'],
+      ['ma_init resets a used filter', 'trainer_reinit()'],
+    ],
+    forbid: [['does not use floating point', /\b(float|double)\b/]],
+  },
+  {
+    id: 'lut_interp', topic: 'Math and signal processing', title: 'Lookup table interpolation', summary: 'Calibrate a sensor in integers',
+    difficulty: 'Medium', minutes: 20, filename: 'lut_interp.c',
+    description: 'An NTC thermistor, a fuel-level sender or a pressure sensor rarely has a straight-line response, so firmware converts raw ADC counts to engineering units with a calibration table of breakpoints and draws straight lines between them. Implement that lookup with integer arithmetic only: clamp outside the table, return table points exactly, and round in between. The tables can span large ranges, so watch the intermediate products.',
+    requirements: '<ul><li><code>xs</code> holds <code>n</code> (at least 1) strictly increasing breakpoints and <code>ys</code> the value at each. All table values lie within ±1 000 000 000; <code>x</code> can be any <code>int32_t</code>.</li><li>At or below <code>xs[0]</code> return <code>ys[0]</code>; at or above <code>xs[n-1]</code> return <code>ys[n-1]</code>.</li><li>Between <code>xs[i]</code> and <code>xs[i+1]</code> return the exact value <code>ys[i] + (x - xs[i]) * (ys[i+1] - ys[i]) / (xs[i+1] - xs[i])</code> rounded to the nearest integer, halves away from zero (like <code>lround</code>): 2.5 gives 3 and -2.5 gives -3. A breakpoint returns its <code>ys</code> exactly.</li><li><code>ys</code> may increase or decrease. Use integers only, and no intermediate result may overflow.</li></ul>',
+    followups: [
+      'Binary search or a linear scan: which would you use for a 16-point table, and for a 1000-point one? What if consecutive calls usually land in the same segment?',
+      'Why mark the tables <code>const</code>, and where does that put them on a microcontroller? What changes if the calibration is measured per unit at the factory?',
+      'You are given 200 measured points but have room for 16 breakpoints. How do you choose them, and how do you bound the error?',
+    ],
+    starter: C`
+#include <stddef.h>
+#include <stdint.h>
+
+/* Look up x in a table of n strictly increasing breakpoints xs[] with values
+   ys[], interpolating linearly between breakpoints and clamping outside. */
+int32_t lut_interp(const int32_t *xs, const int32_t *ys, size_t n, int32_t x)
+{
+    /* TODO */
+    (void)xs;
+    (void)ys;
+    (void)n;
+    (void)x;
+    return 0;
+}
+`,
+    prelude: C`
+/* NTC thermistor: ADC counts to tenths of a degree C. Hotter means fewer counts. */
+static const int32_t trainer_ntc_x[] = {500, 1000, 2000, 3000, 3500};
+static const int32_t trainer_ntc_y[] = {1000, 600, 250, 0, -150};
+static const int32_t trainer_neg_x[] = {-1000, 0, 1000};
+static const int32_t trainer_neg_y[] = {-500, 0, 2000};
+/* Every x across a 64-point table, compared with exact rational rounding. */
+static int trainer_sweep(void) {
+    int32_t xs[64], ys[64];
+    for (int32_t i = 0; i < 64; i++) { xs[i] = i * 10; ys[i] = i * i; }
+    for (int32_t x = -5; x <= 640; x++) {
+        int32_t want;
+        if (x <= 0) want = 0;
+        else if (x >= 630) want = 3969;
+        else {
+            int32_t i = x / 10, k = x % 10;
+            want = (10 * i * i + k * (2 * i + 1) + 5) / 10;
+        }
+        if (lut_interp(xs, ys, 64u, x) != want) return 0;
+    }
+    return 1;
+}
+static int trainer_all_points(void) {
+    for (size_t i = 0; i < 5u; i++) {
+        if (lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, trainer_ntc_x[i]) != trainer_ntc_y[i]) return 0;
+    }
+    for (size_t i = 0; i < 3u; i++) {
+        if (lut_interp(trainer_neg_x, trainer_neg_y, 3u, trainer_neg_x[i]) != trainer_neg_y[i]) return 0;
+    }
+    return 1;
+}
+`,
+    checks: [
+      ['below the table clamps to the first value', 'lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 0) == 1000 && lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 499) == 1000'],
+      ['above the table clamps to the last value', 'lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 3501) == -150 && lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 4095) == -150'],
+      ['extreme inputs clamp without overflow', 'lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, INT32_MIN) == 1000 && lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, INT32_MAX) == -150'],
+      ['every breakpoint returns its value exactly', 'trainer_all_points()'],
+      ['interpolates between points', 'lut_interp((const int32_t[]){0, 100}, (const int32_t[]){0, 1000}, 2u, 25) == 250 && lut_interp((const int32_t[]){0, 100}, (const int32_t[]){0, 1000}, 2u, 50) == 500'],
+      ['decreasing NTC curve', 'lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 750) == 800 && lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 1500) == 425 && lut_interp(trainer_ntc_x, trainer_ntc_y, 5u, 3250) == -75'],
+      ['negative breakpoints and values', 'lut_interp(trainer_neg_x, trainer_neg_y, 3u, -250) == -125 && lut_interp(trainer_neg_x, trainer_neg_y, 3u, 500) == 1000 && lut_interp(trainer_neg_x, trainer_neg_y, 3u, -999) == -500'],
+      ['rounds to nearest, not toward zero', 'lut_interp((const int32_t[]){0, 3}, (const int32_t[]){0, 1}, 2u, 1) == 0 && lut_interp((const int32_t[]){0, 3}, (const int32_t[]){0, 1}, 2u, 2) == 1 && lut_interp((const int32_t[]){0, 3}, (const int32_t[]){0, -1}, 2u, 2) == -1'],
+      ['halves round away from zero', 'lut_interp((const int32_t[]){0, 2}, (const int32_t[]){0, 1}, 2u, 1) == 1 && lut_interp((const int32_t[]){0, 2}, (const int32_t[]){0, -1}, 2u, 1) == -1'],
+      ['negative halves round away from zero, not up', 'lut_interp((const int32_t[]){0, 2}, (const int32_t[]){-3, -2}, 2u, 1) == -3 && lut_interp((const int32_t[]){0, 2}, (const int32_t[]){2, 3}, 2u, 1) == 3'],
+      ['a one-point table returns its value', 'lut_interp((const int32_t[]){100}, (const int32_t[]){42}, 1u, 100) == 42 && lut_interp((const int32_t[]){100}, (const int32_t[]){42}, 1u, -5) == 42 && lut_interp((const int32_t[]){100}, (const int32_t[]){42}, 1u, 500) == 42'],
+      ['products past 32 bits do not overflow', 'lut_interp((const int32_t[]){0, 100000}, (const int32_t[]){0, 100000}, 2u, 50001) == 50001'],
+      ['full +-1e9 span does not overflow', 'lut_interp((const int32_t[]){-1000000000, 1000000000}, (const int32_t[]){1000000000, -1000000000}, 2u, 1) == -1 && lut_interp((const int32_t[]){-1000000000, 1000000000}, (const int32_t[]){1000000000, -1000000000}, 2u, -999999999) == 999999999'],
+      ['every x across a 64-point table', 'trainer_sweep()'],
+    ],
   },
 
   /* ============================================================= Networking */
@@ -1568,6 +2312,249 @@ int32_t temp_millicelsius(uint8_t msb, uint8_t lsb)
       ['-25 and -55 degrees', 'temp_millicelsius(0xE7u, 0x00u) == -25000 && temp_millicelsius(0xC9u, 0x00u) == -55000'],
       ['-0.0625 degrees truncates toward zero', 'temp_millicelsius(0xFFu, 0xF0u) == -62'],
       ['the low 4 bits are ignored', 'temp_millicelsius(0x19u, 0x0Fu) == 25000'],
+    ],
+  },
+  {
+    id: 'soft_timer', topic: 'Platform and hardware', title: 'Software timers', summary: 'Many timers from one tick',
+    difficulty: 'Hard', minutes: 30, filename: 'soft_timer.c',
+    description: 'An MCU has a handful of hardware timers, but the firmware needs dozens of timeouts: LED blink, watchdog kick, modem retry, sensor sampling. The usual answer is one 1 ms tick counter and a table of software timers checked from the main loop. Implement a fixed table of 8 timers with one-shot and repeating modes. The tick is a free-running uint32_t that wraps every 49.7 days, and the timers must keep working across the wrap.',
+    requirements: '<ul><li><code>timers_init</code> stops every timer. <code>timer_start</code> takes a free slot and returns its handle (0 to 7), or -1 if none is free, <code>callback</code> is NULL or <code>period_ms</code> is 0. The timer is first due at <code>now + period_ms</code>.</li><li><code>timer_stop</code> stops a running timer and returns true; it returns false for a handle that is out of range or not running.</li><li><code>timers_poll(now)</code> calls the callback of every due timer, passing its <code>ctx</code>, at most once per timer per call. A one-shot timer then frees its slot. A repeating timer\'s next deadline is its previous deadline plus the period, not <code>now</code> plus the period, so a late poll does not make it drift.</li><li>Times wrap: compare elapsed times (<code>now - start</code>), never absolute deadlines. Update a timer\'s slot before calling its callback, so the callback may start or stop timers, including its own.</li></ul>',
+    followups: [
+      'Would you call <code>timers_poll</code> from the 1 ms tick interrupt or from the main loop? What does each choice mean for what callbacks may do, and what must be protected?',
+      'A callback stops a different timer, or starts a new one, while <code>timers_poll</code> is walking the table. What can go wrong, and how does this design avoid it?',
+      'With 500 timers, scanning the table every tick is too slow. How do a sorted delta list or a hierarchical timer wheel (as in the Linux kernel) help?',
+    ],
+    starter: C`
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define MAX_TIMERS 8
+
+typedef void (*TimerCallback)(void *ctx);
+
+typedef struct SoftTimer {
+    bool active;
+    bool repeat;
+    uint32_t start;          /* tick at which the current period began */
+    uint32_t period;         /* in ms (ticks) */
+    TimerCallback callback;
+    void *ctx;
+} SoftTimer;
+
+static SoftTimer timers[MAX_TIMERS];
+
+/* Stop every timer. */
+void timers_init(void)
+{
+    /* TODO */
+    (void)timers;
+}
+
+/* Start a timer due period_ms after now. Return its handle 0..MAX_TIMERS-1,
+   or -1 if no slot is free, callback is NULL or period_ms is 0. */
+int timer_start(uint32_t now, uint32_t period_ms, bool repeat, TimerCallback callback, void *ctx)
+{
+    /* TODO */
+    (void)now;
+    (void)period_ms;
+    (void)repeat;
+    (void)callback;
+    (void)ctx;
+    return -1;
+}
+
+/* Stop a running timer. Return false for a bad handle or a stopped timer. */
+bool timer_stop(int handle)
+{
+    /* TODO */
+    (void)handle;
+    return false;
+}
+
+/* Call the callback of every timer that is due at tick now. */
+void timers_poll(uint32_t now)
+{
+    /* TODO */
+    (void)now;
+}
+`,
+    prelude: C`
+static void trainer_count(void *ctx) { (*(int *)ctx)++; }
+
+static int trainer_one_shot(void) {
+    int n = 0;
+    timers_init();
+    int h = timer_start(100u, 50u, false, trainer_count, &n);
+    if (h < 0 || h >= MAX_TIMERS) return 0;
+    timers_poll(100u); timers_poll(120u); timers_poll(149u);
+    if (n != 0) return 0;
+    timers_poll(150u);
+    if (n != 1) return 0;
+    timers_poll(151u); timers_poll(200u); timers_poll(1000u);
+    return n == 1;
+}
+static int trainer_one_shot_frees(void) {
+    int n = 0, other = 0;
+    timers_init();
+    int h = timer_start(0u, 10u, false, trainer_count, &n);
+    timers_poll(10u);
+    if (n != 1 || timer_stop(h)) return 0;
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (timer_start(10u, 100u, true, trainer_count, &other) < 0) return 0;
+    }
+    return 1;
+}
+static int trainer_repeat(void) {
+    int n = 0;
+    timers_init();
+    if (timer_start(0u, 10u, true, trainer_count, &n) < 0) return 0;
+    for (uint32_t t = 1u; t <= 100u; t++) {
+        timers_poll(t);
+        if (n != (int)(t / 10u)) return 0;
+    }
+    return 1;
+}
+static int trainer_no_drift(void) {
+    int n = 0;
+    timers_init();
+    if (timer_start(0u, 10u, true, trainer_count, &n) < 0) return 0;
+    timers_poll(13u); if (n != 1) return 0;   /* 3 ms late */
+    timers_poll(19u); if (n != 1) return 0;
+    timers_poll(20u); if (n != 2) return 0;   /* still on the 10 ms grid */
+    timers_poll(29u); if (n != 2) return 0;
+    timers_poll(30u); if (n != 3) return 0;
+    timers_poll(55u); if (n != 4) return 0;   /* missed 40 and 50: once per poll */
+    timers_poll(56u); if (n != 5) return 0;   /* catches up on 50 */
+    timers_poll(59u); if (n != 5) return 0;
+    timers_poll(60u); return n == 6;
+}
+static int trainer_stop(void) {
+    int n = 0, r = 0;
+    timers_init();
+    int h = timer_start(0u, 10u, false, trainer_count, &n);
+    if (h < 0 || !timer_stop(h)) return 0;
+    timers_poll(10u); timers_poll(50u);
+    if (n != 0 || timer_stop(h)) return 0;
+    int hr = timer_start(50u, 10u, true, trainer_count, &r);
+    timers_poll(60u);
+    if (r != 1 || !timer_stop(hr)) return 0;
+    timers_poll(70u); timers_poll(80u);
+    return r == 1;
+}
+static int trainer_bad_handles(void) {
+    timers_init();
+    return !timer_stop(-1) && !timer_stop(MAX_TIMERS) && !timer_stop(1000) && !timer_stop(INT32_MIN) && !timer_stop(3);
+}
+static int trainer_all_slots(void) {
+    int n = 0;
+    unsigned seen = 0u;
+    timers_init();
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        int h = timer_start(0u, 100u, false, trainer_count, &n);
+        if (h < 0 || h >= MAX_TIMERS || (seen & (1u << h))) return 0;
+        seen |= 1u << h;
+    }
+    if (timer_start(0u, 100u, false, trainer_count, &n) != -1) return 0;
+    timers_init();
+    timers_poll(1000u);
+    if (n != 0) return 0;
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (timer_start(1000u, 100u, false, trainer_count, &n) < 0) return 0;
+    }
+    return 1;
+}
+static int trainer_reuse(void) {
+    int n = 0, h[MAX_TIMERS];
+    timers_init();
+    for (int i = 0; i < MAX_TIMERS; i++) h[i] = timer_start(0u, 100u, true, trainer_count, &n);
+    if (!timer_stop(h[5])) return 0;
+    int again = timer_start(0u, 100u, true, trainer_count, &n);
+    if (again < 0 || again >= MAX_TIMERS) return 0;
+    return timer_start(0u, 100u, true, trainer_count, &n) == -1;
+}
+static int trainer_bad_args(void) {
+    int n = 0;
+    timers_init();
+    return timer_start(0u, 10u, false, NULL, &n) == -1 && timer_start(0u, 0u, true, trainer_count, &n) == -1;
+}
+static int trainer_wrap_one_shot(void) {
+    int n = 0;
+    timers_init();
+    if (timer_start(0xFFFFFFF0u, 0x20u, false, trainer_count, &n) < 0) return 0;
+    timers_poll(0xFFFFFFF8u); timers_poll(0xFFFFFFFFu); timers_poll(0u); timers_poll(0x0Fu);
+    if (n != 0) return 0;
+    timers_poll(0x10u);
+    return n == 1;
+}
+static int trainer_wrap_repeat(void) {
+    int n = 0;
+    uint32_t start = 0xFFFFFFF6u;
+    timers_init();
+    if (timer_start(start, 5u, true, trainer_count, &n) < 0) return 0;
+    for (uint32_t k = 1u; k <= 30u; k++) {
+        timers_poll(start + k);
+        if (n != (int)(k / 5u)) return 0;
+    }
+    return 1;
+}
+static int trainer_independent(void) {
+    int a = 0, b = 0, c = 0;
+    timers_init();
+    if (timer_start(0u, 3u, true, trainer_count, &a) < 0) return 0;
+    if (timer_start(0u, 7u, true, trainer_count, &b) < 0) return 0;
+    if (timer_start(0u, 5u, false, trainer_count, &c) < 0) return 0;
+    for (uint32_t t = 1u; t <= 21u; t++) timers_poll(t);
+    return a == 7 && b == 3 && c == 1;
+}
+/* A repeating timer whose callback stops it on the second call. */
+typedef struct TrainerSelf { int handle; int count; } TrainerSelf;
+static void trainer_stop_self(void *ctx) {
+    TrainerSelf *s = (TrainerSelf *)ctx;
+    if (++s->count == 2) (void)timer_stop(s->handle);
+}
+static int trainer_callback_stops(void) {
+    TrainerSelf s = {-1, 0};
+    timers_init();
+    s.handle = timer_start(0u, 10u, true, trainer_stop_self, &s);
+    if (s.handle < 0) return 0;
+    for (uint32_t t = 1u; t <= 100u; t++) timers_poll(t);
+    return s.count == 2;
+}
+/* A one-shot that restarts itself from its callback while every other slot is busy. */
+static uint32_t trainer_now;
+typedef struct TrainerRestart { int count; int failed; } TrainerRestart;
+static void trainer_restart(void *ctx) {
+    TrainerRestart *r = (TrainerRestart *)ctx;
+    if (++r->count < 3 && timer_start(trainer_now, 10u, false, trainer_restart, r) < 0) r->failed = 1;
+}
+static int trainer_callback_restarts(void) {
+    int busy = 0;
+    TrainerRestart r = {0, 0};
+    timers_init();
+    for (int i = 0; i < MAX_TIMERS - 1; i++) {
+        if (timer_start(0u, 1000u, true, trainer_count, &busy) < 0) return 0;
+    }
+    if (timer_start(0u, 10u, false, trainer_restart, &r) < 0) return 0;
+    for (trainer_now = 1u; trainer_now <= 100u; trainer_now++) timers_poll(trainer_now);
+    return r.count == 3 && !r.failed;
+}
+`,
+    checks: [
+      ['a one-shot fires once, at its deadline and not before', 'trainer_one_shot()'],
+      ['a fired one-shot frees its slot', 'trainer_one_shot_frees()'],
+      ['a repeating timer fires every period', 'trainer_repeat()'],
+      ['a late poll does not make a repeating timer drift', 'trainer_no_drift()'],
+      ['timer_stop prevents firing', 'trainer_stop()'],
+      ['timer_stop rejects bad and idle handles', 'trainer_bad_handles()'],
+      ['eight timers, then -1; timers_init frees them all', 'trainer_all_slots()'],
+      ['a stopped slot is reused', 'trainer_reuse()'],
+      ['timer_start rejects a NULL callback or zero period', 'trainer_bad_args()'],
+      ['a one-shot works across the tick wrap', 'trainer_wrap_one_shot()'],
+      ['a repeating timer works across the tick wrap', 'trainer_wrap_repeat()'],
+      ['timers run independently with their own ctx', 'trainer_independent()'],
+      ['a callback can stop its own repeating timer', 'trainer_callback_stops()'],
+      ['a one-shot callback can restart itself when the table is full', 'trainer_callback_restarts()'],
     ],
   },
 

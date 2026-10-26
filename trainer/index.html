@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#087e78">
-  <meta name="description" content="Practise the C coding questions asked in embedded, firmware and network platform software interviews: bits, memory, lists, strings, packet parsing, switching and hardware, checked by a real compiler in your browser.">
+  <meta name="description" content="Practise the C coding questions asked in embedded and firmware software interviews: bits and registers, memory, strings, fixed-point maths, timers, state machines and packet parsing, checked by a real compiler in your browser.">
   <title>Embedded C Interview Trainer</title>
   <meta name="color-scheme" content="light dark">
   <script>
@@ -22,13 +22,14 @@
   </header>
   <main class="layout">
     <aside class="sidebar">
-      <div class="eyebrow">FIRMWARE &amp; NETWORK PLATFORM INTERVIEWS</div>
-      <h1>Practise the C questions <br>platform interviews ask.</h1>
-      <p class="intro">Classic problems on bits, memory, lists and strings, plus packet parsing, switching and hardware for network platform roles. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
+      <div class="eyebrow">EMBEDDED SOFTWARE INTERVIEWS</div>
+      <h1>Practise the C questions <br>embedded interviews ask.</h1>
+      <p class="intro">Classic problems on bits and registers, memory, strings, fixed-point maths, timers and state machines, plus packet parsing for networking roles. A real C compiler checks each answer in your browser and catches undefined behaviour.</p>
       <button class="text-button start-link" id="welcome-button" type="button">New here? Choose where to start →</button>
       <button class="plan-button" id="plan-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">14</span><span class="plan-button-text"><b id="plan-button-label">Open the training plan</b><small id="plan-button-meta">14 days of problems and study</small></span></button>
       <button class="plan-button" id="quiz-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">?</span><span class="plan-button-text"><b id="quiz-button-label">Study guide and quiz</b><small id="quiz-button-meta">Read the notes, then test yourself</small></span></button>
       <button class="plan-button" id="notes-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">≡</span><span class="plan-button-text"><b id="notes-button-label">Learning guide</b><small>What to remember and understand</small></span></button>
+      <button class="plan-button" id="mock-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">⏱</span><span class="plan-button-text"><b id="mock-button-label">Mock interview test</b><small id="mock-button-meta">Timed questions and coding, scored</small></span></button>
       <button class="plan-button" id="sandbox-button" type="button" aria-pressed="false"><span class="plan-button-icon" aria-hidden="true">{ }</span><span class="plan-button-text"><b id="sandbox-button-label">C sandbox</b><small>Write and run any C program</small></span></button>
       <section class="progress-card" aria-live="polite">
         <div class="progress-heading"><div><span class="eyebrow">YOUR PROGRESS</span><h2>Problems solved</h2></div><strong id="progress-count">0 / 0</strong></div>
@@ -46,6 +47,7 @@
       <div class="workspace-head"><div><div class="eyebrow" id="exercise-kicker">PROBLEM 1</div><h2 id="exercise-title">Bit operations</h2></div><span class="local-label"><span></span> Runs on this computer</span></div>
       <label class="problem-select"><span class="visually-hidden">Choose a problem</span><select id="problem-select"></select></label>
       <article class="exercise-panel" id="exercise-panel">
+        <div class="mock-banner" id="mock-banner" hidden><span>Mock interview test · <b id="mock-banner-timer"></b></span><button class="text-button" id="mock-banner-back" type="button">Back to the test</button></div>
         <div class="exercise-meta"><span class="difficulty" id="exercise-difficulty">EASY</span><span class="target-time" id="exercise-time"></span><span class="timer" id="timer" role="timer" hidden></span><button class="text-button" id="timer-button" type="button">Start timed attempt</button></div>
         <p class="exercise-description" id="exercise-description"></p>
         <div class="requirements" id="requirements"></div>
@@ -75,11 +77,39 @@
         <div class="run-row"><div class="run-hint" id="sandbox-hint" aria-live="polite">Shortcut: Ctrl+Enter (⌘+Enter on Mac)</div><button id="sandbox-run" class="run-button" type="button"><span>▶</span> Run</button></div>
         <section class="program-panel" id="sandbox-output-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span class="program-meta" id="sandbox-meta"></span></div><pre id="sandbox-output"></pre><p id="sandbox-note" hidden></p></section>
       </article>
+      <article class="plan-panel mock-panel" id="mock-panel" hidden>
+        <section id="mock-intro">
+          <p class="plan-intro">A timed rehearsal of an embedded software interview round: <b>10 concept questions</b> on C, pointers, memory, interrupts, RTOS and hardware, then <b>2 coding problems</b> checked by the compiler. As in a real interview there are no hints and no feedback until you submit.</p>
+          <ul class="mock-rules">
+            <li>Between 30 and 50 minutes, depending on the problems drawn. The clock keeps running if you leave the page, and the test submits itself when time is up.</li>
+            <li>The coding problems start from fresh starter code; your saved drafts are left alone.</li>
+            <li>Scored 40% on the questions and 60% on the coding, with a breakdown and what to study next.</li>
+          </ul>
+          <div class="run-row"><div class="run-hint">Find a quiet half hour first.</div><button class="run-button" id="mock-start" type="button">Start the test →</button></div>
+          <div id="mock-history"></div>
+        </section>
+        <section id="mock-run" hidden>
+          <div class="mock-bar"><span class="timer" id="mock-timer" role="timer"></span><span class="mock-status" id="mock-status"></span><button class="next-button" id="mock-submit" type="button">Submit test</button></div>
+          <h3 class="mock-part">Part 1 · Concept questions</h3>
+          <ol class="mock-questions" id="mock-questions"></ol>
+          <h3 class="mock-part">Part 2 · Coding</h3>
+          <p class="mock-note">Open a problem, solve it and run the checks there. A pass is recorded here straight away.</p>
+          <div class="mock-problems" id="mock-problems"></div>
+          <div class="run-row"><div class="run-hint">You can change answers until you submit.</div><button class="run-button" id="mock-submit-bottom" type="button">Submit test →</button></div>
+        </section>
+        <section id="mock-result" hidden>
+          <div class="mock-score"><strong id="mock-score"></strong><div><h3 id="mock-verdict"></h3><p id="mock-summary"></p></div></div>
+          <div class="mock-breakdown" id="mock-breakdown"></div>
+          <div id="mock-next"></div>
+          <div id="mock-review"></div>
+          <div class="run-row"><button class="next-button" id="mock-overview" type="button">Past results</button><button class="run-button" id="mock-again" type="button">Take another test →</button></div>
+        </section>
+      </article>
       <article class="plan-panel welcome-panel" id="welcome-panel" hidden>
         <p class="plan-intro">Pick what fits you best. Everything runs in your browser, nothing needs installing, and you can switch any time from the sidebar.</p>
         <div class="welcome-paths">
           <button class="welcome-path" type="button" data-path="learn"><span class="welcome-icon" aria-hidden="true">?</span><b>I am learning C</b><span>Read the study guides on C, pointers and memory, with a short quiz after each one.</span></button>
-          <button class="welcome-path" type="button" data-path="problems"><span class="welcome-icon" aria-hidden="true">✓</span><b>I am preparing for embedded or firmware interviews</b><span>Solve 26 classic problems, from bit tricks to state machines. A real compiler checks each answer.</span></button>
+          <button class="welcome-path" type="button" data-path="problems"><span class="welcome-icon" aria-hidden="true">✓</span><b>I am preparing for embedded or firmware interviews</b><span>Solve <span id="welcome-count">the</span> classic problems, from bit tricks to software timers. A real compiler checks each answer.</span></button>
           <button class="welcome-path" type="button" data-path="plan"><span class="welcome-icon" aria-hidden="true">14</span><b>I am interviewing for network platform roles</b><span>Follow the 14-day plan: problems, study questions and a quiz for each day.</span></button>
           <button class="welcome-path" type="button" data-path="sandbox"><span class="welcome-icon" aria-hidden="true">{ }</span><b>I want to try some C</b><span>Open the sandbox, write any program and run it straight away.</span></button>
         </div>

@@ -147,6 +147,151 @@ uint32_t swap_bytes32(uint32_t x)
 }
 `,
   },
+  bcd: {
+    hints: [
+      'In packed BCD each nibble holds one decimal digit: the tens digit goes in the high nibble and the units digit in the low nibble. Which two operators split a number into tens and units?',
+      'To encode, put <code>value / 10</code> in the high nibble and <code>value % 10</code> in the low one. To decode, take the high nibble times 10 plus the low nibble. Validity is just "each nibble is at most 9".',
+      'Encode: <code>(uint8_t)(((value / 10u) &lt;&lt; 4) | (value % 10u))</code>. Decode: <code>(bcd &gt;&gt; 4) * 10u + (bcd &amp; 0x0Fu)</code>. A common slip is <code>bcd &gt;&gt; 4 * 10</code>: <code>*</code> binds tighter than <code>&gt;&gt;</code>, so it shifts by 40.',
+    ],
+    explain: 'Each nibble is one decimal digit, so encoding is divide and modulo by 10 and decoding is <code>high * 10 + low</code>. <code>bcd_is_valid</code> checks both nibbles separately: a byte such as <code>0x5A</code> is a legal binary value but not a legal BCD one, and decoding it blindly would give 60 instead of an error.',
+    solution: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+/* Convert value (0..99) to packed BCD: 45 -> 0x45. */
+uint8_t bin_to_bcd(uint8_t value)
+{
+    return (uint8_t)(((value / 10u) << 4) | (value % 10u));
+}
+
+/* Convert packed BCD to binary: 0x45 -> 45. */
+uint8_t bcd_to_bin(uint8_t bcd)
+{
+    return (uint8_t)((bcd >> 4) * 10u + (bcd & 0x0Fu));
+}
+
+/* Return true when both nibbles of bcd are decimal digits (0..9). */
+bool bcd_is_valid(uint8_t bcd)
+{
+    return (bcd >> 4) <= 9u && (bcd & 0x0Fu) <= 9u;
+}
+`,
+  },
+  highest_bit: {
+    hints: [
+      'For the highest set bit, a simple version shifts <code>x</code> right until it is 0 and counts the shifts. For the power of two, once you know the highest bit you know which power to try.',
+      'A faster <code>highest_set_bit</code> is a binary search: if the top 16 bits are non-zero, add 16 and shift right by 16; then do the same for 8, 4, 2 and 1. For <code>next_power_of_two</code>, decrement, copy the top bit into every lower bit, then add 1.',
+      'Smearing: <code>x--; x |= x &gt;&gt; 1; x |= x &gt;&gt; 2; x |= x &gt;&gt; 4; x |= x &gt;&gt; 8; x |= x &gt;&gt; 16; return x + 1u;</code>. Handle 0 first: <code>0 - 1</code> wraps to all ones and the result would be 0, not 1. Do not compute <code>1u &lt;&lt; (highest + 1)</code> for 32: shifting by 32 is undefined.',
+    ],
+    explain: 'The binary search halves the window five times (16, 8, 4, 2, 1), so it always takes exactly five steps. Smearing turns <code>x - 1</code> into a run of ones below its top bit, and adding 1 carries into the next power of two; the decrement is what keeps an exact power unchanged. Unsigned wraparound makes values above <code>0x80000000</code> come out as 0 with no undefined shift, and 0 is special-cased because <code>0 - 1</code> would wrap the same way.',
+    solution: C`
+#include <stdint.h>
+
+/* Return the index (0..31) of the most significant 1 bit in x, or -1 for 0. */
+int highest_set_bit(uint32_t x)
+{
+    if (x == 0u) {
+        return -1;
+    }
+    int n = 0;
+    if (x >= UINT32_C(1) << 16) { n += 16; x >>= 16; }
+    if (x >= UINT32_C(1) << 8)  { n += 8;  x >>= 8; }
+    if (x >= UINT32_C(1) << 4)  { n += 4;  x >>= 4; }
+    if (x >= UINT32_C(1) << 2)  { n += 2;  x >>= 2; }
+    if (x >= UINT32_C(1) << 1)  { n += 1; }
+    return n;
+}
+
+/* Return the smallest power of two >= x. Returns 1 for 0, and 0 when x is
+   above 0x80000000 (the result would not fit in 32 bits). */
+uint32_t next_power_of_two(uint32_t x)
+{
+    if (x == 0u) {
+        return 1u;
+    }
+    x--;                /* so an exact power of two maps to itself */
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return x + 1u;      /* wraps to 0 when x was above 0x80000000 */
+}
+`,
+  },
+  bitmap_alloc: {
+    hints: [
+      'Turn a block number into a word index and a bit mask: <code>block / 32</code> picks the word, <code>block % 32</code> picks the bit. Allocating is "find the first 0 bit, set it"; freeing is "check the bit is 1, clear it".',
+      'In <code>bm_alloc</code>, skip any word equal to <code>0xFFFFFFFF</code> (all used), then scan its bits from 0 upward. In <code>bm_free</code>, check the range before you index the array, then reject the call if the bit is already 0.',
+      'Build masks with <code>UINT32_C(1) &lt;&lt; bit</code>, never <code>1 &lt;&lt; bit</code>: for bit 31 the signed shift overflows, which is undefined behaviour. The range check is <code>block &lt; 0 || block &gt;= BM_BLOCKS</code>; forgetting the negative case lets <code>bm_free(bm, -1)</code> write outside the array.',
+    ],
+    explain: 'Each block maps to one bit, so alloc is a scan for the lowest 0 bit (whole full words are skipped in one compare) and free is a test-and-clear. Testing the bit before clearing it is what turns a silent double free into an error, and range-checking first keeps a bad index from reaching the array. Using unsigned masks matters at block 31, where <code>1 &lt;&lt; 31</code> on an <code>int</code> is undefined.',
+    solution: C`
+#include <stdbool.h>
+#include <stdint.h>
+
+#define BM_BLOCKS 64
+#define BM_WORD_BITS 32
+
+/* Block n is bit (n % 32) of words[n / 32]; 1 = used, 0 = free. */
+typedef struct Bitmap {
+    uint32_t words[BM_BLOCKS / BM_WORD_BITS];
+} Bitmap;
+
+/* Mark every block free. */
+void bm_init(Bitmap *bm)
+{
+    for (int w = 0; w < BM_BLOCKS / BM_WORD_BITS; w++) {
+        bm->words[w] = 0u;
+    }
+}
+
+/* Mark the lowest free block used and return its index, or -1 when full. */
+int bm_alloc(Bitmap *bm)
+{
+    for (int w = 0; w < BM_BLOCKS / BM_WORD_BITS; w++) {
+        if (bm->words[w] == UINT32_MAX) {
+            continue;   /* every block in this word is used */
+        }
+        for (int b = 0; b < BM_WORD_BITS; b++) {
+            uint32_t mask = UINT32_C(1) << b;
+            if ((bm->words[w] & mask) == 0u) {
+                bm->words[w] |= mask;
+                return w * BM_WORD_BITS + b;
+            }
+        }
+    }
+    return -1;
+}
+
+/* Free a block. Return false if block is out of range or already free. */
+bool bm_free(Bitmap *bm, int block)
+{
+    if (block < 0 || block >= BM_BLOCKS) {
+        return false;
+    }
+    uint32_t *word = &bm->words[block / BM_WORD_BITS];
+    uint32_t mask = UINT32_C(1) << (block % BM_WORD_BITS);
+    if ((*word & mask) == 0u) {
+        return false;   /* double free, or never allocated */
+    }
+    *word &= ~mask;
+    return true;
+}
+
+/* Return the number of used blocks. */
+int bm_count_used(const Bitmap *bm)
+{
+    int count = 0;
+    for (int w = 0; w < BM_BLOCKS / BM_WORD_BITS; w++) {
+        for (uint32_t x = bm->words[w]; x != 0u; x &= x - 1u) {
+            count++;
+        }
+    }
+    return count;
+}
+`,
+  },
   align: {
     hints: [
       'With a power-of-two <code>align</code>, the low bits of an aligned address are all zero. Which mask covers those low bits?',
@@ -255,6 +400,48 @@ void pool_free(Pool *pool, void *block)
     }
     *(void **)block = pool->free_list;
     pool->free_list = block;
+}
+`,
+  },
+  aligned_alloc: {
+    hints: [
+      'malloc cannot give you the alignment, so ask it for more bytes than you need and pick an aligned address inside that block. Then ask yourself: what does <code>aligned_free</code> need in order to call <code>free</code>?',
+      'Allocate <code>size + alignment - 1 + sizeof(void *)</code> bytes. Skip <code>sizeof(void *)</code> bytes from the start, round that address up to <code>alignment</code>, and store the malloc pointer in the slot just before the returned address. <code>aligned_free</code> reads that slot and frees it.',
+      'Round up with <code>(addr + alignment - 1) &amp; ~(uintptr_t)(alignment - 1)</code> on a <code>uintptr_t</code>, and store with <code>((void **)aligned)[-1] = raw;</code>. Pitfall: <code>size + overhead</code> can wrap around to a tiny number, so check <code>size &gt; SIZE_MAX - overhead</code> first. Skipping the pointer slot <em>before</em> rounding keeps that slot pointer-aligned even for alignment 1 or 2.',
+    ],
+    explain: 'Over-allocating by <code>alignment - 1</code> guarantees an aligned address fits inside the block, and the extra <code>sizeof(void *)</code> leaves room to store the original malloc pointer just below it, which is all <code>aligned_free</code> needs. Because malloc\'s result is pointer-aligned and the slot is skipped before rounding, the stored pointer is itself aligned for any power-of-two alignment, and the overflow check stops a huge <code>size</code> from wrapping into a tiny allocation that the caller would then overrun.',
+    solution: C`
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+/* Return size bytes aligned to alignment (a power of two), or NULL. */
+void *aligned_malloc(size_t size, size_t alignment)
+{
+    if (alignment == 0u || (alignment & (alignment - 1u)) != 0u) {
+        return NULL;
+    }
+    size_t overhead = alignment - 1u + sizeof(void *);
+    if (size > SIZE_MAX - overhead) {
+        return NULL;
+    }
+    void *raw = malloc(size + overhead);
+    if (raw == NULL) {
+        return NULL;
+    }
+    uintptr_t addr = (uintptr_t)raw + sizeof(void *);
+    addr = (addr + alignment - 1u) & ~(uintptr_t)(alignment - 1u);
+    void **block = (void **)addr;
+    block[-1] = raw;                    /* remember what malloc returned */
+    return block;
+}
+
+/* Free a block returned by aligned_malloc. NULL is allowed. */
+void aligned_free(void *p)
+{
+    if (p != NULL) {
+        free(((void **)p)[-1]);
+    }
 }
 `,
   },
@@ -413,6 +600,92 @@ int split_args(char *line, char *argv[], int max_args)
 }
 `,
   },
+  itoa: {
+    hints: [
+      'Peeling digits off with <code>% base</code> and <code>/ base</code> gives them least significant first, and a negative <code>value</code> needs its magnitude. Where can you hold both safely?',
+      'Validate the base, then take the magnitude as an <code>unsigned</code>, collect digits into a small scratch array, work out the total length (plus 1 for a <code>-</code>), and only then check it against <code>size</code> and copy the digits out in reverse.',
+      'Magnitude: <code>unsigned mag = value &lt; 0 ? 0u - (unsigned)value : (unsigned)value;</code>. Writing <code>-value</code> overflows for <code>INT_MIN</code>, and a <code>while (mag != 0)</code> loop prints nothing for 0, so use <code>do ... while</code>. The fit test is <code>len + 1 &gt; size</code>, or <code>len &gt;= size</code>.',
+    ],
+    explain: 'Converting to <code>unsigned</code> before negating is defined modular arithmetic, so <code>INT_MIN</code> becomes 2147483648 instead of overflowing. Building the digits in a scratch array sized for the binary worst case lets the function measure the result before touching <code>buf</code>, so a short buffer gets a clean empty string rather than a truncated number that looks valid.',
+    solution: C`
+#include <limits.h>
+#include <stddef.h>
+
+/* Write value in base 2..16 to buf, a buffer of size bytes. Return the number
+   of characters written (not counting the NUL), or 0 if base is invalid or the
+   result does not fit; then buf holds "" when size > 0. */
+size_t int_to_str(int value, unsigned base, char *buf, size_t size)
+{
+    static const char digits[] = "0123456789abcdef";
+    char tmp[sizeof(int) * CHAR_BIT];   /* enough for base 2 */
+    size_t n = 0u;
+
+    if (size > 0u)
+        buf[0] = '\0';
+    if (base < 2u || base > 16u)
+        return 0u;
+
+    /* Negate in unsigned arithmetic: -INT_MIN would overflow an int. */
+    unsigned mag = value < 0 ? 0u - (unsigned)value : (unsigned)value;
+    do {
+        tmp[n++] = digits[mag % base];
+        mag /= base;
+    } while (mag != 0u);
+
+    size_t len = n + (value < 0 ? 1u : 0u);
+    if (len >= size)
+        return 0u;
+
+    size_t i = 0u;
+    if (value < 0)
+        buf[i++] = '-';
+    while (n > 0u)
+        buf[i++] = tmp[--n];
+    buf[i] = '\0';
+    return len;
+}
+`,
+  },
+  reverse_words: {
+    hints: [
+      'What happens to the word order if you reverse the whole string character by character? What is wrong with each word afterwards?',
+      'Reverse the entire string, then walk it and reverse each word back. A helper that reverses <code>len</code> characters starting at a pointer does both jobs.',
+      'A word ends at a space or at the NUL, so loop <code>for (i = 0; i &lt;= len; i++)</code> and reverse <code>s + start</code> for <code>i - start</code> characters whenever <code>s[i]</code> is <code>\' \'</code> or <code>\'\\0\'</code>. Stopping at <code>i &lt; len</code> forgets the last word.',
+    ],
+    explain: 'Reversing the whole string puts the words in the right order but each one backwards; reversing every word again fixes the letters. Each character moves twice, so it is O(n) time with only a few index variables, and spaces stay where the mirror image puts them, so the length never changes.',
+    solution: C`
+#include <stddef.h>
+#include <string.h>
+
+/* Reverse the len characters starting at p. */
+static void reverse_span(char *p, size_t len)
+{
+    size_t i = 0u;
+    while (len > i + 1u) {
+        len--;
+        char t = p[i];
+        p[i] = p[len];
+        p[len] = t;
+        i++;
+    }
+}
+
+/* Reverse the order of the space-separated words in s, in place. */
+void reverse_words(char *s)
+{
+    size_t len = strlen(s);
+    size_t start = 0u;
+
+    reverse_span(s, len);
+    for (size_t i = 0u; i <= len; i++) {
+        if (s[i] == ' ' || s[i] == '\0') {
+            reverse_span(s + start, i - start);
+            start = i + 1u;
+        }
+    }
+}
+`,
+  },
   endian: {
     hints: [
       'Build the value from individual bytes with shifts and ORs; never reinterpret the buffer as a wider type.',
@@ -559,6 +832,130 @@ bool parse_u32(const char *s, uint32_t *out)
     }
     *out = value;
     return true;
+}
+`,
+  },
+  saturate: {
+    hints: [
+      'Two <code>int16_t</code> values can produce a sum or product that does not fit in 16 bits. Do the arithmetic in a type where it always fits, then decide what to return.',
+      'Compute in <code>int32_t</code>, then clamp to <code>INT16_MIN</code>..<code>INT16_MAX</code> with one helper shared by all three functions. For Q15, the 32-bit product is Q30, so add half of the last bit you drop (<code>0x4000</code>) and shift right by 15.',
+      '<code>q15_mul</code> is <code>clamp16(((int32_t)a * b + 0x4000) &gt;&gt; 15)</code>, and the clamp catches -1 &times; -1 = 32768. The classic bug is <code>(int16_t)(a + b)</code>, which wraps, or an overflow test like <code>if (a + b &gt; INT16_MAX)</code> done in 16-bit thinking; and for <code>sat_sub16</code>, negating <code>b</code> breaks on <code>INT16_MIN</code>.',
+    ],
+    explain: 'Any sum, difference or product of two <code>int16_t</code> values fits in <code>int32_t</code> (the largest product is 2<sup>30</sup>), so computing wide and clamping once is both correct and free of undefined behaviour. Adding <code>0x4000</code> before the arithmetic shift rounds to nearest instead of always toward -infinity, and the clamp turns the single unrepresentable product, -1 &times; -1, into 32767.',
+    solution: C`
+#include <stdint.h>
+
+/* Clamp a 32-bit intermediate result to the int16_t range. */
+static int16_t clamp16(int32_t x)
+{
+    if (x > INT16_MAX)
+        return INT16_MAX;
+    if (x < INT16_MIN)
+        return INT16_MIN;
+    return (int16_t)x;
+}
+
+/* Return a + b clamped to the int16_t range. */
+int16_t sat_add16(int16_t a, int16_t b)
+{
+    return clamp16((int32_t)a + b);
+}
+
+/* Return a - b clamped to the int16_t range. */
+int16_t sat_sub16(int16_t a, int16_t b)
+{
+    return clamp16((int32_t)a - b);
+}
+
+/* Return a * b in Q15, rounded to nearest (halves up), saturating -1 * -1. */
+int16_t q15_mul(int16_t a, int16_t b)
+{
+    int32_t product = (int32_t)a * b;           /* Q30, |product| <= 2^30 */
+    return clamp16((product + 0x4000) >> 15);   /* round, back to Q15 */
+}
+`,
+  },
+  moving_average: {
+    hints: [
+      'Re-adding the whole window on every call works, but costs N additions per sample. Keep a running total instead, and adjust it as one sample enters and one leaves.',
+      'Use <code>samples[]</code> as a circular buffer with a write index and a count. On each add: once the window is full, subtract the sample about to be overwritten; store the new sample, add it to the sum, advance the index, and divide by the count.',
+      'Round with <code>(sum + count / 2u) / count</code>. Make the sum a <code>uint32_t</code>: 16 samples of 65535 need 20 bits, so a <code>uint16_t</code> sum wraps on the second full-scale sample. And do not subtract the old slot before the window has filled: it holds garbage or zero, not a sample.',
+    ],
+    explain: 'The sum always equals the total of the samples in the buffer, so each add is one subtraction, one addition and one division however long the window is. Dividing by <code>count</code> rather than <code>window</code> gives a correct average during warm-up, adding <code>count / 2</code> before the division rounds to nearest instead of always down, and a 32-bit sum holds 16 full-scale samples with room to spare.',
+    solution: C`
+#include <stdint.h>
+
+#define MA_MAX_WINDOW 16u
+
+typedef struct MovingAverage {
+    uint16_t samples[MA_MAX_WINDOW];   /* the most recent samples */
+    uint8_t window;                    /* samples to average, 1..MA_MAX_WINDOW */
+    uint8_t count;                     /* samples held, up to window */
+    uint8_t next;                      /* slot the next sample goes in */
+    uint32_t sum;                      /* total of the samples held: up to 20 bits */
+} MovingAverage;
+
+/* Reset the filter and set the window length (1..MA_MAX_WINDOW). */
+void ma_init(MovingAverage *ma, uint8_t window)
+{
+    *ma = (MovingAverage){ .window = window };
+}
+
+/* Add one sample and return the rounded average of the last window samples
+   (or of all samples so far, while the window is still filling). */
+uint16_t ma_add(MovingAverage *ma, uint16_t sample)
+{
+    if (ma->count == ma->window) {
+        ma->sum -= ma->samples[ma->next];   /* oldest sample leaves */
+    } else {
+        ma->count++;
+    }
+    ma->samples[ma->next] = sample;
+    ma->sum += sample;
+    ma->next = (uint8_t)((ma->next + 1u) % ma->window);
+
+    return (uint16_t)((ma->sum + ma->count / 2u) / ma->count);
+}
+`,
+  },
+  lut_interp: {
+    hints: [
+      'Deal with the ends first: anything at or beyond the first or last breakpoint returns that end value. That also handles a one-point table. What is left is finding the segment that contains <code>x</code>.',
+      'This solution uses a binary search: keep <code>xs[lo] &lt;= x &lt; xs[hi]</code> and halve the range until <code>hi == lo + 1</code> (a linear scan is fine for a short table). Then compute the exact value in that segment as one fraction over <code>dx = xs[hi] - xs[lo]</code>.',
+      'Numerator: <code>ys[lo] * dx + (x - xs[lo]) * (ys[hi] - ys[lo])</code>, every term in <code>int64_t</code>, since even <code>dx</code> can exceed 32 bits. Divide once with rounding: <code>(num + dx / 2) / dx</code> when <code>num &gt;= 0</code>, <code>(num - dx / 2) / dx</code> otherwise. Rounding only the step and adding it to <code>ys[lo]</code> rounds -2.5 to -2.',
+    ],
+    explain: 'Clamping first means the arithmetic only ever sees an <code>x</code> inside the table, so <code>x - xs[0]</code> cannot overflow for <code>INT32_MIN</code>. Putting the whole result over one denominator and rounding once gives exact breakpoints and correct ties on both sides of zero, and 64-bit intermediates hold every product the ±10<sup>9</sup> range allows (at most about 6 × 10<sup>18</sup>).',
+    solution: C`
+#include <stddef.h>
+#include <stdint.h>
+
+/* Look up x in a table of n strictly increasing breakpoints xs[] with values
+   ys[], interpolating linearly between breakpoints and clamping outside. */
+int32_t lut_interp(const int32_t *xs, const int32_t *ys, size_t n, int32_t x)
+{
+    if (x <= xs[0]) {
+        return ys[0];
+    }
+    if (x >= xs[n - 1u]) {
+        return ys[n - 1u];
+    }
+
+    /* Binary search for the segment with xs[lo] <= x < xs[hi]. */
+    size_t lo = 0u, hi = n - 1u;
+    while (hi - lo > 1u) {
+        size_t mid = lo + (hi - lo) / 2u;
+        if (xs[mid] <= x) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    /* y = num / dx exactly; round once, halves away from zero. */
+    int64_t dx = (int64_t)xs[hi] - xs[lo];
+    int64_t num = (int64_t)ys[lo] * dx + ((int64_t)x - xs[lo]) * ((int64_t)ys[hi] - ys[lo]);
+    int64_t half = dx / 2;
+    return (int32_t)(num >= 0 ? (num + half) / dx : (num - half) / dx);
 }
 `,
   },
@@ -1047,6 +1444,90 @@ int32_t temp_millicelsius(uint8_t msb, uint8_t lsb)
     uint32_t raw = ((uint32_t)msb << 8) | lsb;
     int32_t steps = sign_extend(raw >> 4, 12u);
     return steps * 625 / 10;
+}
+`,
+  },
+  soft_timer: {
+    hints: [
+      'Store when each timer\'s current period started and how long it is, not an absolute deadline. With unsigned arithmetic, <code>now - start</code> is the true elapsed time even after the tick counter wraps.',
+      'In <code>timers_poll</code>, a timer is due when <code>(uint32_t)(now - start) &gt;= period</code>. A repeating timer then moves <code>start</code> on by one period (to its old deadline); a one-shot clears <code>active</code>. Do that before calling the callback.',
+      'Comparing <code>now &gt;= start + period</code> breaks at the wrap: near 0xFFFFFFF0 the deadline overflows to a small number and the timer fires at once. Re-arming with <code>start = now</code> lets every late poll push the schedule back. Freeing a one-shot after its callback returns means a callback that restarts itself can find the table full, and range-check the handle in <code>timer_stop</code> before indexing.',
+    ],
+    explain: 'Unsigned subtraction is modulo 2<sup>32</sup>, so <code>now - start</code> measures elapsed ticks correctly across the wrap as long as no period exceeds about 49 days. Advancing <code>start += period</code> keeps a repeating timer on its original grid however late the poll is, and updating the slot before the callback runs means the callback sees a consistent table: it can stop its own timer or start a new one in the slot just freed.',
+    solution: C`
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#define MAX_TIMERS 8
+
+typedef void (*TimerCallback)(void *ctx);
+
+typedef struct SoftTimer {
+    bool active;
+    bool repeat;
+    uint32_t start;          /* tick at which the current period began */
+    uint32_t period;         /* in ms (ticks) */
+    TimerCallback callback;
+    void *ctx;
+} SoftTimer;
+
+static SoftTimer timers[MAX_TIMERS];
+
+/* Stop every timer. */
+void timers_init(void)
+{
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        timers[i] = (SoftTimer){ .active = false };
+    }
+}
+
+/* Start a timer due period_ms after now. Return its handle 0..MAX_TIMERS-1,
+   or -1 if no slot is free, callback is NULL or period_ms is 0. */
+int timer_start(uint32_t now, uint32_t period_ms, bool repeat, TimerCallback callback, void *ctx)
+{
+    if (callback == NULL || period_ms == 0u) {
+        return -1;
+    }
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (!timers[i].active) {
+            timers[i] = (SoftTimer){
+                .active = true, .repeat = repeat, .start = now,
+                .period = period_ms, .callback = callback, .ctx = ctx,
+            };
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* Stop a running timer. Return false for a bad handle or a stopped timer. */
+bool timer_stop(int handle)
+{
+    if (handle < 0 || handle >= MAX_TIMERS || !timers[handle].active) {
+        return false;
+    }
+    timers[handle].active = false;
+    return true;
+}
+
+/* Call the callback of every timer that is due at tick now. */
+void timers_poll(uint32_t now)
+{
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        SoftTimer *t = &timers[i];
+        if (!t->active || (uint32_t)(now - t->start) < t->period) {
+            continue;
+        }
+        TimerCallback callback = t->callback;
+        void *ctx = t->ctx;
+        if (t->repeat) {
+            t->start += t->period;   /* next deadline on the original grid */
+        } else {
+            t->active = false;       /* free the slot before the callback */
+        }
+        callback(ctx);
+    }
 }
 `,
   },

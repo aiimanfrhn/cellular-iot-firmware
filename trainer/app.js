@@ -44,10 +44,15 @@ int main(void)
   if (!saved.quiz) saved.quiz = {};   // concept quiz answers, keyed by question id
   if (!saved.hints) saved.hints = {}; // hints revealed per problem; one more than the hint count means the solution is open
   if (!saved.best) saved.best = {};   // fastest timed solve per problem, in seconds
+  if (!saved.mockHistory) saved.mockHistory = [];   // finished mock tests, newest first
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {} }
 
   let active = EXERCISES[saved.active] ? saved.active : ORDER[0];
-  const codeFor = (id) => saved.code[id] ?? EXERCISES[id].starter;
+  /* During a mock test its problems use separate drafts in saved.mock.code,
+     so the test starts from the starter and the learner's own drafts survive. */
+  const inMock = (id) => !!(saved.mock && saved.mock.problems.includes(id));
+  const codeFor = (id) => (inMock(id) ? saved.mock.code[id] : saved.code[id]) ?? EXERCISES[id].starter;
+  const setDraft = (id, code) => { if (inMock(id)) saved.mock.code[id] = code; else saved.code[id] = code; };
   const isCurrentPass = (id) => {
     const r = saved.results[id];
     return !!(r && r.passed && r.version === CHECKER_VERSION && codeFor(id) === r.code);
@@ -134,10 +139,15 @@ int main(void)
       updateRunButton();
       return;
     }
-    saved.results[exercise] = { exercise, passed: !!result.passed, code, version: CHECKER_VERSION, at: new Date().toISOString() };
+    // A failed run inside a mock test must not overwrite a pass from normal practice.
+    const mockRun = inMock(exercise);
+    if (mockRun && result.passed) { saved.mock.solved[exercise] = true; renderMock(); }
+    if (!mockRun || result.passed) {
+      saved.results[exercise] = { exercise, passed: !!result.passed, code, version: CHECKER_VERSION, at: new Date().toISOString() };
+      window.dispatchEvent(new CustomEvent('trainer:result', { detail: { ...saved.results[exercise] } }));
+    }
     if (result.passed && saved.timer && saved.timer.id === exercise) finishTimer(exercise);
     persist();
-    window.dispatchEvent(new CustomEvent('trainer:result', { detail: { ...saved.results[exercise] } }));
     lastResult[exercise] = { ...result, code };
     if (exercise === active) showResult(result);
     renderProgress();
@@ -654,7 +664,7 @@ int main(void)
      guide, the concept quiz, the C sandbox, or one plan day's guide and quiz
      ('day', shown in the quiz panel). */
   function showView(next) {
-    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes', inSandbox = next === 'sandbox', inWelcome = next === 'welcome';
+    const plan = next === 'plan', inQuiz = next === 'quiz', inDay = next === 'day', inNotes = next === 'notes', inSandbox = next === 'sandbox', inWelcome = next === 'welcome', inMockTest = next === 'mock';
     saved.view = next;
     persist();
     $('plan-panel').hidden = !plan;
@@ -662,7 +672,14 @@ int main(void)
     $('quiz-panel').hidden = !(inQuiz || inDay);
     $('sandbox-panel').hidden = !inSandbox;
     $('welcome-panel').hidden = !inWelcome;
-    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes || inSandbox || inWelcome;
+    $('mock-panel').hidden = !inMockTest;
+    $('exercise-panel').hidden = plan || inQuiz || inDay || inNotes || inSandbox || inWelcome || inMockTest;
+    $('mock-button').setAttribute('aria-pressed', String(inMockTest));
+    if (inMockTest) {
+      $('exercise-kicker').textContent = 'MOCK INTERVIEW · EMBEDDED SOFTWARE';
+      $('exercise-title').textContent = 'Interview prep test';
+    }
+    renderMock();
     if (inWelcome) {
       $('exercise-kicker').textContent = 'WELCOME';
       $('exercise-title').textContent = 'Where would you like to start?';
@@ -731,6 +748,7 @@ int main(void)
       select.append(group);
     });
     select.addEventListener('change', () => selectExercise(select.value));
+    $('welcome-count').textContent = ORDER.length;
   }
 
   const CHECK_MARKS = { pass: '✓', fail: '✗', crash: '!', skipped: '–' };
@@ -832,7 +850,7 @@ int main(void)
      Hint text and explanations are trusted HTML from hints.js. */
   function renderHints() {
     const entry = HINTS[active];
-    $('hints').hidden = !entry || timerRunning();   // no hints in a timed attempt, as in an interview
+    $('hints').hidden = !entry || timerRunning() || inMock(active);   // no hints in a timed attempt or mock test
     if (!entry) return;
     const shown = Math.min(saved.hints[active] || 0, entry.hints.length + 1);
     const hintsShown = Math.min(shown, entry.hints.length);
@@ -870,6 +888,7 @@ int main(void)
     const meta = EXERCISES[active], target = meta.minutes * 60, best = saved.best[active];
     const el = $('timer'), button = $('timer-button');
     clearInterval(timerTick); timerTick = null;
+    button.hidden = inMock(active);
     $('exercise-time').textContent = `Aim for about ${meta.minutes} minutes${best ? ` · best ${clock(best)}` : ''}`;
     if (timerRunning()) {
       const { startedAt } = saved.timer;
@@ -941,6 +960,8 @@ int main(void)
     $('requirements').innerHTML = meta.requirements;
     $('followups').innerHTML = meta.followups.map((q) => `<li>${q}</li>`).join('');
     renderHints();
+    $('mock-banner').hidden = !inMock(id);
+    renderMockClock();
     editor.value = codeFor(id);
     updateLines();
     editor.scrollTop = 0;
@@ -997,7 +1018,7 @@ int main(void)
   bindEditorKeys(sandbox, runSandbox);
 
   editor.addEventListener('input', () => {
-    saved.code[active] = editor.value;
+    setDraft(active, editor.value);
     saved.lastEdit = new Date().toISOString();
     persist(); updateLines(); renderProgress();
     $('save-hint').textContent = 'Saved in this browser.';
@@ -1040,6 +1061,7 @@ int main(void)
   $('quiz-button').addEventListener('click', toggleView('quiz', focusQuiz));
   $('notes-button').addEventListener('click', toggleView('notes', () => window.scrollTo({ top: 0 })));
   $('sandbox-button').addEventListener('click', toggleView('sandbox', () => sandbox.focus()));
+  $('mock-button').addEventListener('click', toggleView('mock', () => window.scrollTo({ top: 0 })));
   $('welcome-button').addEventListener('click', toggleView('welcome', () => window.scrollTo({ top: 0, behavior: 'smooth' })));
 
   /* Each path on the welcome page opens the part of the site that fits it. */
@@ -1095,7 +1117,7 @@ int main(void)
     const starter = EXERCISES[active].starter;
     if (editor.value !== starter && !confirm('Replace your draft with the starter code? Your current code for this exercise will be lost. Download it first if you want to keep it.')) return;
     editor.value = starter;
-    saved.code[active] = starter;
+    setDraft(active, starter);
     delete saved.results[active];
     delete lastResult[active];
     persist(); updateLines(); renderProgress();
@@ -1112,6 +1134,228 @@ int main(void)
     setTimeout(() => URL.revokeObjectURL(url), 1000);   // revoking immediately can cancel the download in Firefox
   }
   $('download-button').addEventListener('click', () => downloadFile(editor.value, EXERCISES[active].filename));
+
+  /* --------------------------------------------------------- mock interview
+   * A timed test: concept questions from the quiz, then coding problems run
+   * through the normal checker. saved.mock holds the test in progress:
+   *   { startedAt, limit (s), questions: [ids], answers: {id: option},
+   *     problems: [ids], solved: {id: true}, code: {id: draft} }
+   * Finishing scores it, adds it to saved.mockHistory and deletes saved.mock. */
+  const MOCK_QUESTIONS = 10;
+  const MOCK_QUIZ_WEIGHT = 40, MOCK_CODE_WEIGHT = 60;
+  const MOCK_SKIP_TOPIC = 'Networking';   // the test is for embedded roles
+  let mockView = 'intro';                 // which part of the panel shows when no test is running
+
+  const shuffle = (items) => {
+    const a = [...items];
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  };
+
+  /* Questions are dealt round-robin across topics so one test covers many. */
+  function pickMockQuestions() {
+    const byTopic = {};
+    shuffle(QUIZ.filter((q) => q.topic !== 'networking')).forEach((q) => (byTopic[q.topic] ||= []).push(q.id));
+    const topics = shuffle(Object.keys(byTopic)), picked = [];
+    while (picked.length < MOCK_QUESTIONS && topics.some((t) => byTopic[t].length)) {
+      topics.forEach((t) => { if (picked.length < MOCK_QUESTIONS && byTopic[t].length) picked.push(byTopic[t].pop()); });
+    }
+    return picked;
+  }
+
+  /* One easier and one harder problem from different topics, unsolved ones first. */
+  function pickMockProblems() {
+    const pool = (levels) => shuffle(ORDER.filter((id) => levels.includes(EXERCISES[id].difficulty) && EXERCISES[id].topic !== MOCK_SKIP_TOPIC))
+      .sort((a, b) => Number(isSolved(a)) - Number(isSolved(b)));
+    const first = pool(['Easy', 'Medium'])[0];
+    const second = pool(['Medium', 'Hard']).find((id) => id !== first && EXERCISES[id].topic !== EXERCISES[first].topic);
+    return [first, second].filter(Boolean);
+  }
+
+  const mockLimit = (problems) => Math.ceil((10 + problems.reduce((sum, id) => sum + EXERCISES[id].minutes, 0)) / 5) * 5 * 60;
+  const mockLeft = () => saved.mock.limit - Math.floor((Date.now() - saved.mock.startedAt) / 1000);
+
+  function startMock() {
+    const problems = pickMockProblems();
+    saved.mock = { startedAt: Date.now(), limit: mockLimit(problems), questions: pickMockQuestions(), answers: {}, problems, solved: {}, code: {} };
+    persist();
+    renderMock();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function finishMock() {
+    const m = saved.mock;
+    if (!m) return;
+    const right = m.questions.filter((id) => m.answers[id] === QUESTIONS[id].answer).length;
+    const passed = m.problems.filter((id) => m.solved[id]).length;
+    const score = Math.round(MOCK_QUIZ_WEIGHT * right / m.questions.length + MOCK_CODE_WEIGHT * passed / Math.max(1, m.problems.length));
+    saved.mockHistory.unshift({
+      at: new Date().toISOString(), score, right, questions: m.questions, answers: m.answers,
+      problems: m.problems, solved: m.solved, seconds: Math.min(m.limit, Math.round((Date.now() - m.startedAt) / 1000)), limit: m.limit,
+    });
+    saved.mockHistory.length = Math.min(saved.mockHistory.length, 10);
+    delete saved.mock;
+    mockView = 'result';
+    persist();
+    if (EXERCISES[active] && saved.view === 'problem') selectExercise(active);   // back to the learner's own draft
+    renderMock();
+    renderProgress();
+  }
+
+  /* The countdown in the test bar and on a test problem's banner. */
+  function renderMockClock() {
+    $('mock-button-meta').textContent = saved.mock ? `In progress · ${clock(Math.max(0, mockLeft()))} left` : 'Timed questions and coding, scored';
+    if (!saved.mock) return;
+    const left = Math.max(0, mockLeft());
+    $('mock-timer').textContent = `${clock(left)} left`;
+    $('mock-timer').className = `timer${left < 120 ? ' over' : ''}`;
+    $('mock-banner-timer').textContent = `${clock(left)} left`;
+    const answered = saved.mock.questions.filter((id) => saved.mock.answers[id] !== undefined).length;
+    const passed = saved.mock.problems.filter((id) => saved.mock.solved[id]).length;
+    $('mock-status').textContent = `${answered}/${saved.mock.questions.length} answered · ${passed}/${saved.mock.problems.length} coding passed`;
+  }
+  setInterval(() => {
+    if (!saved.mock) return;
+    if (mockLeft() <= 0) finishMock();
+    else renderMockClock();
+  }, 1000);
+
+  function questionOptions(q, { selected, reveal, onChoose }) {
+    const options = document.createElement('div');
+    options.className = 'quiz-options';
+    options.setAttribute('role', 'radiogroup');
+    options.append(...q.options.map((text, i) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'quiz-option';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', String(selected === i));
+      if (selected === i) button.classList.add('selected');
+      if (reveal) {
+        button.disabled = true;
+        if (i === q.answer) button.classList.add('correct');
+        else if (i === selected) button.classList.add('wrong');
+      }
+      button.innerHTML = `<span class="quiz-key">${i + 1}</span><span>${text}</span>`;
+      if (onChoose) button.addEventListener('click', () => onChoose(i));
+      return button;
+    }));
+    return options;
+  }
+
+  function renderMock() {
+    renderMockClock();
+    const m = saved.mock;
+    $('mock-button-label').textContent = saved.view === 'mock' ? 'Back to the problem' : 'Mock interview test';
+    $('mock-intro').hidden = !!m || mockView !== 'intro';
+    $('mock-run').hidden = !m;
+    $('mock-result').hidden = !!m || mockView !== 'result' || !saved.mockHistory.length;
+    if (!m && mockView === 'result' && !saved.mockHistory.length) $('mock-intro').hidden = false;
+    if (m) renderMockRun(m);
+    else if (!$('mock-result').hidden) renderMockResult(saved.mockHistory[0]);
+    else renderMockIntro();
+  }
+
+  function renderMockIntro() {
+    const history = saved.mockHistory;
+    if (!history.length) { $('mock-history').replaceChildren(); return; }
+    $('mock-history').innerHTML = `<table class="mock-history"><thead><tr><th>DATE</th><th>SCORE</th><th>QUESTIONS</th><th>CODING</th><th>TIME</th></tr></thead><tbody>${
+      history.map((h) => `<tr><td>${dateLabel(h.at)}</td><td><b>${h.score}%</b></td><td>${h.right} / ${h.questions.length}</td><td>${h.problems.filter((id) => h.solved[id]).length} / ${h.problems.length}</td><td>${clock(h.seconds)}</td></tr>`).join('')
+    }</tbody></table>`;
+  }
+
+  function renderMockRun(m) {
+    $('mock-questions').replaceChildren(...m.questions.map((id) => {
+      const q = QUESTIONS[id], li = document.createElement('li');
+      const prompt = document.createElement('div');
+      prompt.className = 'quiz-prompt';
+      prompt.innerHTML = q.prompt;
+      li.append(prompt, questionOptions(q, {
+        selected: m.answers[id],
+        onChoose: (i) => { m.answers[id] = i; persist(); renderMockRun(m); renderMockClock(); },
+      }));
+      return li;
+    }));
+    $('mock-problems').replaceChildren(...m.problems.map((id, i) => {
+      const p = EXERCISES[id], card = document.createElement('div');
+      card.className = `mock-problem${m.solved[id] ? ' passed' : ''}`;
+      card.innerHTML = `<small>PROBLEM ${i + 1} · ${p.difficulty.toUpperCase()} · ABOUT ${p.minutes} MIN</small><b></b><small></small>`;
+      card.querySelector('b').textContent = p.title;
+      card.querySelectorAll('small')[1].textContent = m.solved[id] ? '✓ All checks passed' : p.summary;
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'next-button';
+      open.textContent = m.solved[id] ? 'Review the code' : 'Open and solve →';
+      open.addEventListener('click', () => { selectExercise(id); window.scrollTo({ top: 0 }); editor.focus(); });
+      card.append(open);
+      return card;
+    }));
+  }
+
+  function renderMockResult(h) {
+    const passed = h.problems.filter((id) => h.solved[id]).length;
+    $('mock-score').textContent = `${h.score}%`;
+    $('mock-verdict').textContent = h.score >= 80 ? 'Interview ready on this round.' : h.score >= 60 ? 'Close. Review the misses and go again.' : 'Keep practising before the real thing.';
+    $('mock-summary').textContent = `${h.right} of ${h.questions.length} questions right and ${passed} of ${h.problems.length} coding problems passed, in ${clock(h.seconds)} of the ${clock(h.limit)} allowed.`;
+
+    const missed = h.questions.filter((id) => h.answers[id] !== QUESTIONS[id].answer);
+    const weakTopics = [...new Set(missed.map((id) => QUESTIONS[id].topic))];
+    const topicTitle = (t) => (QUIZ_TOPICS.find((x) => x.id === t) || { title: t }).title;
+    const stat = (label, value, items) => `<div class="mock-stat"><span>${label}</span><b>${value}</b>${items.length ? `<ul>${items.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</div>`;
+    $('mock-breakdown').innerHTML =
+      stat('Concept questions', `${h.right} / ${h.questions.length}`, weakTopics.map((t) => `Missed: ${topicTitle(t)}`)) +
+      stat('Coding', `${passed} / ${h.problems.length}`, h.problems.map((id) => `${h.solved[id] ? '✓' : '✗'} ${EXERCISES[id] ? EXERCISES[id].title : id}`)) +
+      stat('Time', clock(h.seconds), [`of ${clock(h.limit)} allowed`]);
+
+    // What to do next: the study guide for each weak topic, and the unsolved problems.
+    const next = document.createElement('div');
+    next.className = 'mock-links';
+    weakTopics.forEach((t) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'next-button';
+      b.textContent = `Study: ${topicTitle(t)}`;
+      b.addEventListener('click', () => { showView('quiz'); openTopic(t); focusQuiz(); window.scrollTo({ top: 0 }); });
+      next.append(b);
+    });
+    h.problems.filter((id) => !h.solved[id] && EXERCISES[id]).forEach((id) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'next-button';
+      b.textContent = `Retry: ${EXERCISES[id].title}`;
+      b.addEventListener('click', () => { selectExercise(id); window.scrollTo({ top: 0 }); });
+      next.append(b);
+    });
+    $('mock-next').replaceChildren(...(next.children.length ? [Object.assign(document.createElement('h3'), { className: 'mock-part', textContent: 'What to work on next' }), next] : []));
+
+    $('mock-review').replaceChildren(...(missed.length ? [Object.assign(document.createElement('h3'), { className: 'mock-part', textContent: `Questions to review (${missed.length})` })] : []),
+      ...missed.map((id) => {
+        const q = QUESTIONS[id], item = document.createElement('div');
+        item.className = 'mock-review-item';
+        const prompt = document.createElement('div');
+        prompt.className = 'quiz-prompt';
+        prompt.innerHTML = q.prompt;
+        const explain = document.createElement('p');
+        explain.innerHTML = `${h.answers[id] === undefined ? '<b>Not answered.</b> ' : ''}${q.explain}`;
+        item.append(prompt, questionOptions(q, { selected: h.answers[id], reveal: true }), explain);
+        return item;
+      }));
+  }
+
+  function submitMock() {
+    const m = saved.mock;
+    const unanswered = m.questions.filter((id) => m.answers[id] === undefined).length;
+    const unsolved = m.problems.filter((id) => !m.solved[id]).length;
+    const left = [unanswered && `${unanswered} unanswered ${unanswered === 1 ? 'question' : 'questions'}`, unsolved && `${unsolved} unsolved ${unsolved === 1 ? 'problem' : 'problems'}`].filter(Boolean);
+    if (left.length && !confirm(`Submit with ${left.join(' and ')}? Time is still running, so you can keep going.`)) return;
+    finishMock();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  $('mock-start').addEventListener('click', startMock);
+  $('mock-submit').addEventListener('click', submitMock);
+  $('mock-submit-bottom').addEventListener('click', submitMock);
+  $('mock-again').addEventListener('click', startMock);
+  $('mock-overview').addEventListener('click', () => { mockView = 'intro'; renderMock(); });
+  $('mock-banner-back').addEventListener('click', () => { showView('mock'); window.scrollTo({ top: 0 }); });
 
   /* ---------------------------------------------------------- share links
    * A link carries the sandbox code and stdin in the URL hash, deflated and
@@ -1256,7 +1500,8 @@ int main(void)
   updateLines(sandbox);
   startChecker();
   selectExercise(active);
-  if (['plan', 'quiz', 'day', 'notes', 'sandbox', 'welcome'].includes(startView)) showView(startView);
+  if (saved.mock && mockLeft() <= 0) finishMock();   // time ran out while the page was closed
+  if (['plan', 'quiz', 'day', 'notes', 'sandbox', 'welcome', 'mock'].includes(startView)) showView(startView);
   if (firstVisit) showView('welcome');
   openSharedLink();
 })();

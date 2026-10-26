@@ -95,6 +95,9 @@
 
 * { box-sizing: border-box; }
 
+/* The hidden attribute always wins, even over a component's display: flex or grid. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--paper);
@@ -621,6 +624,73 @@ select:focus-visible {
   font: 12.5px var(--mono);
 }
 
+/* ------------------------------------------------------- mock interview */
+.mock-rules { margin: 14px 0 6px; padding-left: 20px; color: var(--ink-3); font-size: 14px; line-height: 1.7; }
+.mock-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -6px 0 6px;
+  padding: 10px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.mock-status { flex: 1; color: var(--muted); font-size: 13px; }
+.mock-part { margin: 22px 0 10px; font: 700 15px var(--display); }
+.mock-note { margin: -4px 0 10px; color: var(--muted); font-size: 13px; }
+.mock-questions { margin: 0; padding-left: 22px; }
+.mock-questions > li { margin: 0 0 18px; padding-left: 4px; }
+.mock-questions .quiz-prompt { margin: 0 0 8px; font-size: 14.5px; }
+.mock-questions .quiz-options { gap: 6px; }
+.mock-problems { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.mock-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.mock-problem.passed { border-color: var(--ok-line); background: var(--ok-bg); }
+.mock-problem b { font: 700 14.5px var(--display); }
+.mock-problem small { color: var(--muted); font-size: 12.5px; }
+.mock-problem .next-button { align-self: flex-start; margin-top: 4px; }
+.mock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -8px 0 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-tint);
+  color: var(--warn-ink);
+  font-size: 13px;
+}
+.mock-banner b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.mock-score { display: flex; align-items: center; gap: 22px; margin-bottom: 18px; }
+.mock-score strong { font: 800 46px var(--display); color: var(--accent); white-space: nowrap; }
+.mock-score h3 { margin: 0 0 4px; font: 700 18px var(--display); }
+.mock-score p { margin: 0; color: var(--ink-3); line-height: 1.6; }
+.mock-breakdown { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+.mock-stat { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.mock-stat span { display: block; color: var(--muted); font-size: 12px; }
+.mock-stat b { font: 700 18px var(--display); }
+.mock-stat ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-3); }
+.mock-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.mock-review-item { margin: 0 0 16px; }
+.mock-review-item .quiz-prompt { margin: 0 0 8px; font-size: 14.5px; }
+.mock-review-item .quiz-options { gap: 6px; }
+.mock-review-item p { margin: 8px 0 0; color: var(--ink-3); font-size: 13.5px; line-height: 1.6; }
+.mock-history { width: 100%; margin-top: 18px; border-collapse: collapse; font-size: 13px; }
+.mock-history th { text-align: left; color: var(--faint); font: 600 11px var(--mono); letter-spacing: .4px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.mock-history td { padding: 8px; border-bottom: 1px solid var(--line-soft); color: var(--ink-3); }
+.mock-history td b { color: var(--ink); }
+
 /* -------------------------------------------------------------- welcome */
 .start-link { margin: -6px 0 14px -4px; }
 .welcome-paths { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 18px 0 16px; }
@@ -986,6 +1056,9 @@ footer { font-size: 12px; color: var(--faint); margin: 12px 2px; }
   .theme-toggle { margin-left: 0; padding: 5px 8px; }
   .theme-word { display: none; }
   .welcome-paths { grid-template-columns: 1fr; }
+  .mock-problems, .mock-breakdown { grid-template-columns: 1fr; }
+  .mock-score { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .mock-bar { flex-wrap: wrap; }
   .layout { padding: 21px 15px 38px; }
   .workspace-head { align-items: flex-start; gap: 8px; flex-direction: column; }
   .exercise-panel,

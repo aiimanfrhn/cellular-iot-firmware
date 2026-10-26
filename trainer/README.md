@@ -1,15 +1,16 @@
 # Embedded C Trainer
 
-A browser-based practice site for embedded, firmware and network platform software interviews. It has 26 C coding problems in seven topics:
+A browser-based practice site for embedded and firmware software interviews, with extra problems for network platform roles. It has 36 C coding problems in eight topics:
 
 | Topic | Problems |
 |---|---|
-| Bits and registers | Bit operations, count bits and powers of two, register bit fields, reverse bits and swap bytes |
-| Memory and pointers | Align an address, memmove with overlap, fixed-block memory pool |
-| Lists and strings | Reverse a linked list, find a loop and the middle, safe string copy, split a CLI command |
+| Bits and registers | Bit operations, count bits and powers of two, register bit fields, reverse bits and swap bytes, BCD for an RTC chip, highest set bit and next power of two, bitmap block allocator |
+| Memory and pointers | Align an address, memmove with overlap, fixed-block memory pool, aligned malloc and free |
+| Lists and strings | Reverse a linked list, find a loop and the middle, safe string copy, split a CLI command, integer to string, reverse the words |
 | Data and protocols | Endian-safe byte access, ring buffer, CRC-16/CCITT, parse an unsigned integer |
+| Math and signal processing | Saturating and Q15 arithmetic, moving average filter, lookup table interpolation |
 | Networking | Subnet masks and prefixes, parse an IPv4 address, MAC addresses, Internet checksum, Ethernet and VLAN header, validate an IPv4 header, MAC learning table |
-| Platform and hardware | Poll a register with a timeout, temperature sensor reading |
+| Platform and hardware | Poll a register with a timeout, temperature sensor reading, software timers |
 | State machines | Button debouncer, fan control with hysteresis |
 
 A **14-day training plan** (the button under the introduction) orders the problems for network platform software roles, such as C developers on switches, routers and access points. It adds study questions on networking, Linux, concurrency, debugging and behavioural interviews, which you tick off as you go. Each day starts with its own study guide and a 5-question quiz, which counts as done once every question has been answered correctly. The plan lives in `plan.js`, and each day's guide and quiz in `plan-guide.js` (one entry per day, in the same order).
@@ -26,7 +27,9 @@ The **theme** button in the header switches between the system setting, light an
 
 A first visit opens a **welcome page** that asks what you are here for (learning C, firmware interviews, network platform roles, or just trying C) and opens the matching part of the site. The *New here?* link in the sidebar brings it back.
 
-**Start timed attempt** turns a problem into a mock interview: it counts down from the problem's target time, hides the hints, and records your time when the checks pass. The best time shows next to the target.
+The **Mock interview test** rehearses a whole embedded interview round: 10 concept questions dealt across topics (networking left out), then two coding problems, one easier and one harder, under one clock of 30 to 50 minutes. There are no hints and no feedback until you submit; the test problems start from the starter code in their own drafts, so your saved work is untouched, and the test submits itself when time runs out, even if the page was closed. The scorecard weighs questions 40% and coding 60%, lists the missed questions with explanations, links the study guides for weak topics, and keeps a history of the last 10 attempts.
+
+**Start timed attempt** turns a single problem into a mock interview: it counts down from the problem's target time, hides the hints, and records your time when the checks pass. The best time shows next to the target.
 
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
