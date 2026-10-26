@@ -4,6 +4,7 @@ import { QUIZ, QUIZ_TOPICS } from './quiz.js';
 import { GUIDE } from './guide.js';
 import { DAY_GUIDES } from './plan-guide.js';
 import { NOTES, NOTES_INTRO } from './notes.js';
+import { HINTS } from './hints.js';
 
 (() => {
   /* Problem data lives in problems.js; the sidebar list, the mobile picker
@@ -39,6 +40,7 @@ int main(void)
   if (!saved.results) saved.results = {};
   if (!saved.plan) saved.plan = {};   // study items ticked off in the training plan
   if (!saved.quiz) saved.quiz = {};   // concept quiz answers, keyed by question id
+  if (!saved.hints) saved.hints = {}; // hints revealed per problem; one more than the hint count means the solution is open
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {} }
 
   let active = EXERCISES[saved.active] ? saved.active : ORDER[0];
@@ -762,6 +764,35 @@ int main(void)
     renderProgram(null);
   }
 
+  /* Hints open one at a time; after the last one the solution can be shown.
+     Hint text and explanations are trusted HTML from hints.js. */
+  function renderHints() {
+    const entry = HINTS[active];
+    $('hints').hidden = !entry;
+    if (!entry) return;
+    const shown = Math.min(saved.hints[active] || 0, entry.hints.length + 1);
+    const hintsShown = Math.min(shown, entry.hints.length);
+    $('hint-list').innerHTML = entry.hints.slice(0, hintsShown).map((h) => `<li>${h}</li>`).join('');
+    $('hint-list').hidden = !hintsShown;
+    $('hint-button').hidden = hintsShown >= entry.hints.length;
+    $('hint-button').textContent = `Show hint ${hintsShown + 1} of ${entry.hints.length}`;
+    $('hints-note').textContent = hintsShown < entry.hints.length
+      ? 'Reveal one hint at a time. Try each before the next.'
+      : 'That is every hint. The solution is there if you need it.';
+    const solutionOpen = shown > entry.hints.length;
+    $('solution-button').hidden = hintsShown < entry.hints.length || solutionOpen;
+    $('solution').hidden = !solutionOpen;
+    if (solutionOpen) {
+      $('solution-explain').innerHTML = entry.explain;
+      $('solution-code').textContent = entry.solution;
+    }
+  }
+  function revealHint() {
+    saved.hints[active] = (saved.hints[active] || 0) + 1;
+    persist();
+    renderHints();
+  }
+
   function selectExercise(id) {
     active = id;
     saved.active = id;
@@ -780,6 +811,7 @@ int main(void)
     $('exercise-description').textContent = meta.description;
     $('requirements').innerHTML = meta.requirements;
     $('followups').innerHTML = meta.followups.map((q) => `<li>${q}</li>`).join('');
+    renderHints();
     editor.value = codeFor(id);
     updateLines();
     editor.scrollTop = 0;
@@ -849,6 +881,23 @@ int main(void)
   });
 
   $('run-button').addEventListener('click', runCheck);
+
+  $('hint-button').addEventListener('click', revealHint);
+  $('solution-button').addEventListener('click', revealHint);
+  $('solution-hide').addEventListener('click', () => {
+    saved.hints[active] = HINTS[active].hints.length;
+    persist();
+    renderHints();
+  });
+  $('solution-load').addEventListener('click', () => {
+    const { solution } = HINTS[active];
+    if (editor.value !== solution && !confirm('Replace your code with the model solution? Download your draft first if you want to keep it.')) return;
+    editor.value = solution;
+    editor.dispatchEvent(new Event('input'));   // saves the draft, as typing would
+    renderProgram(null);
+    setPanel('idle', '↳', 'Solution loaded', 'Run the checks to see it pass, then try rewriting it from memory.');
+    editor.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
 
   /* Each sidebar button opens its view, or returns to the problem when that
      view is already open. */
@@ -921,6 +970,58 @@ int main(void)
   }
   $('download-button').addEventListener('click', () => downloadC(editor.value, EXERCISES[active].filename));
 
+  /* ---------------------------------------------------------- share links
+   * A link carries the sandbox code and stdin in the URL hash, deflated and
+   * base64url-encoded, so nothing is uploaded: #sandbox=<data>. */
+  const SHARE_PREFIX = '#sandbox=';
+  async function pipeBytes(bytes, stream) {
+    return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+  }
+  async function encodeShare(code, input) {
+    const packed = await pipeBytes(new TextEncoder().encode(JSON.stringify({ code, input })), new CompressionStream('deflate-raw'));
+    let text = '';
+    packed.forEach((b) => { text += String.fromCharCode(b); });
+    return btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function decodeShare(data) {
+    const text = atob(data.replace(/-/g, '+').replace(/_/g, '/'));
+    const bytes = Uint8Array.from(text, (c) => c.charCodeAt(0));
+    const { code, input } = JSON.parse(new TextDecoder().decode(await pipeBytes(bytes, new DecompressionStream('deflate-raw'))));
+    if (typeof code !== 'string') throw new Error('no code in link');
+    return { code, input: typeof input === 'string' ? input : '' };
+  }
+  const sandboxHint = (text) => { $('sandbox-hint').textContent = text; };
+
+  $('sandbox-share').addEventListener('click', async () => {
+    try {
+      const url = `${location.href.split('#')[0]}${SHARE_PREFIX}${await encodeShare(sandbox.value, $('sandbox-stdin').value)}`;
+      try { await navigator.clipboard.writeText(url); sandboxHint('Link copied. Anyone who opens it sees this code and input.'); }
+      catch (_) { window.prompt('Copy this link:', url); }
+    } catch (error) {
+      sandboxHint(`Could not make a link: ${error.message}`);
+    }
+  });
+
+  /* Opening a shared link shows its code without saving it, so the learner's
+     own draft is kept until they edit the shared code. */
+  async function openSharedLink() {
+    if (!location.hash.startsWith(SHARE_PREFIX)) return;
+    try {
+      const { code, input } = await decodeShare(location.hash.slice(SHARE_PREFIX.length));
+      sandbox.value = code;
+      $('sandbox-stdin').value = input;
+      updateLines(sandbox);
+      renderProgram(null, SANDBOX_OUTPUT);
+      showView('sandbox');
+      sandboxHint('Opened code from a shared link. Editing it replaces your saved sandbox draft.');
+    } catch (_) {
+      showView('sandbox');
+      sandboxHint('That share link is damaged or incomplete, so your own sandbox code is shown.');
+    }
+    history.replaceState(null, '', location.href.split('#')[0]);
+  }
+  window.addEventListener('hashchange', openSharedLink);
+
   $('sandbox-run').addEventListener('click', runSandbox);
   $('sandbox-download').addEventListener('click', () => downloadC(sandbox.value, SANDBOX_FILE));
   $('sandbox-reset').addEventListener('click', () => {
@@ -930,6 +1031,27 @@ int main(void)
     persist(); updateLines(sandbox);
     renderProgram(null, SANDBOX_OUTPUT);
   });
+
+  /* ------------------------------------------------------------------ theme
+   * 'system' follows the OS; 'light' and 'dark' set data-theme on <html>,
+   * which the inline script in index.html also reads before first paint. */
+  const THEME_KEY = 'embedded-c-trainer-theme';
+  const THEMES = ['system', 'light', 'dark'];
+  let theme = 'system';
+  try { theme = THEMES.includes(localStorage.getItem(THEME_KEY)) ? localStorage.getItem(THEME_KEY) : 'system'; } catch (_) {}
+  function applyTheme() {
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    const button = $('theme-toggle');
+    button.innerHTML = `<span class="theme-word">Theme: </span>${theme}`;
+    button.setAttribute('aria-label', `Colour theme: ${theme}. Select to change.`);
+  }
+  $('theme-toggle').addEventListener('click', () => {
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    try { localStorage.setItem(THEME_KEY, theme); } catch (_) {}
+    applyTheme();
+  });
+  applyTheme();
 
   /* ------------------------------------------------------------------ start */
   window.addEventListener('trainer:cloud-progress', (event) => {
@@ -947,4 +1069,5 @@ int main(void)
   startChecker();
   selectExercise(active);
   if (['plan', 'quiz', 'day', 'notes', 'sandbox'].includes(startView)) showView(startView);
+  openSharedLink();
 })();

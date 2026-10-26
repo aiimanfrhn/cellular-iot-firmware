@@ -9,6 +9,7 @@
  * progress stays in the browser's local storage.
  * ------------------------------------------------------------------------- */
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
 const root = new URL('.', import.meta.url);
@@ -20,7 +21,7 @@ const OUT = new URL('dist-single/embedded-c-trainer.html', root);
 /* Bundle one entry into a single script and return its code. */
 async function bundle(entry, format, plugins = []) {
   const result = await build({
-    root: root.pathname,
+    root: fileURLToPath(root),
     configFile: false,
     logLevel: 'warn',
     plugins,
@@ -29,7 +30,7 @@ async function bundle(entry, format, plugins = []) {
       write: false,
       minify: true,
       modulePreload: false,
-      rollupOptions: { input: new URL(entry, root).pathname, output: { format, inlineDynamicImports: true } },
+      rollupOptions: { input: fileURLToPath(new URL(entry, root)), output: { format, inlineDynamicImports: true } },
     },
   });
   return result.output.find((file) => file.type === 'chunk').code;
@@ -66,4 +67,4 @@ html = html.replace('</head>', () => `  <style>\n${safeIn('style', css)}\n  </st
 
 await mkdir(new URL('.', OUT), { recursive: true });
 await writeFile(OUT, html);
-console.log(`Wrote ${OUT.pathname} (${(html.length / 1024).toFixed(0)} KB). Compiler assets load from ${CLANG_CDN}`);
+console.log(`Wrote ${fileURLToPath(OUT)} (${(html.length / 1024).toFixed(0)} KB). Compiler assets load from ${CLANG_CDN}`);

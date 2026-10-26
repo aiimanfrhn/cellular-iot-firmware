@@ -18,7 +18,11 @@ A **14-day training plan** (the button under the introduction) orders the proble
 
 The **Learning guide** page sums up everything in 12 areas, each split into *what to remember* (facts, numbers and syntax to know by heart) and *what to understand* (ideas to explain in your own words), with links to the matching guides, quizzes and plan days. A filter shows just one of the two lists. It lives in `notes.js`; update it when the guides change.
 
-The **C sandbox** is a free-form editor for trying things out: write any C program, give it optional stdin, and choose **Run** (Ctrl+Enter) to see its output and exit code. Nothing is checked. It compiles with the same strict flags and undefined-behaviour traps as the problems, and its code is saved in this browser.
+The **C sandbox** is a free-form editor for trying things out: write any C program, give it optional stdin, and choose **Run** (Ctrl+Enter) to see its output and exit code. Nothing is checked. It compiles with the same strict flags and undefined-behaviour traps as the problems, and its code is saved in this browser. **Copy share link** puts the code and input into a link (compressed into the part after `#`, so nothing is uploaded); whoever opens it sees that code in their sandbox, and their own saved draft is only replaced once they edit it.
+
+Every problem has a **Stuck?** box with three hints, revealed one at a time from a nudge to nearly the code, and then a model solution with a short explanation that can be loaded into the editor. They live in `hints.js`.
+
+The **theme** button in the header switches between the system setting, light and dark.
 
 Each problem has a difficulty, a target time, and the follow-up questions interviewers commonly ask next. Clang compiles and runs the checks inside a WebAssembly worker in the browser, so no server or native C toolchain is needed, and your source code is not sent anywhere. The first visit downloads about 28 MB of compiler assets; after that the browser can cache them.
 
@@ -35,7 +39,7 @@ Open the local URL shown by Vite. Use `pnpm build` to create a static production
 
 ### One-file version for offline study
 
-`pnpm build:single` writes the whole trainer (problems, training plan, learning guide, study guides, quizzes and checker) into one file, `dist-single/embedded-c-trainer.html`. Open it straight from disk in Chrome, Edge or Firefox; no server is needed. The ~28 MB compiler runtime is too large to embed, so the file downloads it from jsDelivr the first time you run checks and the browser caches it. Supabase sync is not included; progress stays in that browser. Rebuild it after changing `problems.js`, `plan.js`, `plan-guide.js`, `guide.js`, `quiz.js` or `notes.js`.
+`pnpm build:single` writes the whole trainer (problems, training plan, learning guide, study guides, quizzes and checker) into one file, `dist-single/embedded-c-trainer.html`. Open it straight from disk in Chrome, Edge or Firefox; no server is needed. The ~28 MB compiler runtime is too large to embed, so the file downloads it from jsDelivr the first time you run checks and the browser caches it. Supabase sync is not included; progress stays in that browser. Rebuild it after changing `problems.js`, `hints.js`, `plan.js`, `plan-guide.js`, `guide.js`, `quiz.js` or `notes.js`.
 
 ## Workflow
 
@@ -55,7 +59,9 @@ Drafts, results, ticked plan items and quiz answers live in this browser's local
 
 ## Adding a problem
 
-Problems live in `problems.js`. Each entry has the text shown on the page, a starter (which must compile), a C `prelude` with test helpers, `checks` as `[label, C expression]` pairs, and optional `forbid` rules. The sidebar, picker and progress card are generated from this list. Add the new id to a day in `plan.js` so the training plan includes it. The checker runner is `checks.js`. Bump `CHECKER_VERSION` in `app.js` whenever checks get stricter, so earlier passes have to be re-run.
+Problems live in `problems.js`. Each entry has the text shown on the page, a starter (which must compile), a C `prelude` with test helpers, `checks` as `[label, C expression]` pairs, and optional `forbid` rules. The sidebar, picker and progress card are generated from this list. Add the new id to a day in `plan.js` so the training plan includes it. The checker runner is `checks.js`. Bump `CHECKER_VERSION` in `problems.js` whenever checks get stricter, so earlier passes have to be re-run.
+
+Give the problem an entry in `hints.js` too: three graded hints, a model solution and a short explanation. Then run `pnpm verify`, which compiles every model solution with the real checker in Node and fails if any of them no longer passes its problem's checks. Run it after changing any problem's checks as well.
 
 ## Deploy to Vercel
 

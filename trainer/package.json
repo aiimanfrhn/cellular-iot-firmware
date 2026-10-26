@@ -11,7 +11,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "clang-wasm-copy-assets public/clang && vite build",
     "build:single": "node build-single.mjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "verify": "node verify-solutions.mjs"
   },
   "dependencies": {
     "@live-codes/clang-wasm": "0.3.0",

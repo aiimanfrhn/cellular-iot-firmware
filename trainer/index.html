@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#087e78">
   <meta name="description" content="Practise the C coding questions asked in embedded, firmware and network platform software interviews: bits, memory, lists, strings, packet parsing, switching and hardware, checked by a real compiler in your browser.">
   <title>Embedded C Interview Trainer</title>
+  <meta name="color-scheme" content="light dark">
+  <script>
+    /* Apply a saved light/dark choice before the first paint, so there is no flash. */
+    try { const t = localStorage.getItem('embedded-c-trainer-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (_) {}
+  </script>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
   <script type="module" src="/supabase-trainer.js"></script>
@@ -13,7 +18,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Embedded C Trainer home"><span class="brand-mark">C</span><span>Embedded C <b>Trainer</b></span></a>
-    <div class="header-status"><span class="status-dot" id="server-dot"></span><span id="server-status">Starting browser compiler…</span></div>
+    <div class="topbar-end"><div class="header-status"><span class="status-dot" id="server-dot"></span><span id="server-status">Starting browser compiler…</span></div><button class="theme-toggle" id="theme-toggle" type="button"><span class="theme-word">Theme: </span>system</button></div>
   </header>
   <main class="layout">
     <aside class="sidebar">
@@ -41,6 +46,16 @@
         <div class="exercise-meta"><span class="difficulty" id="exercise-difficulty">EASY</span><span class="target-time" id="exercise-time"></span></div>
         <p class="exercise-description" id="exercise-description"></p>
         <div class="requirements" id="requirements"></div>
+        <section class="hints" id="hints" aria-live="polite">
+          <div class="hints-head"><b>Stuck?</b><span id="hints-note">Reveal one hint at a time. Try each before the next.</span></div>
+          <ol class="hint-list" id="hint-list" hidden></ol>
+          <div class="hint-actions"><button class="text-button" id="hint-button" type="button">Show a hint</button><button class="text-button" id="solution-button" type="button" hidden>Show the solution</button></div>
+          <div class="solution" id="solution" hidden>
+            <p id="solution-explain"></p>
+            <pre><code id="solution-code"></code></pre>
+            <div class="hint-actions"><button class="text-button" id="solution-load" type="button">Load into editor</button><button class="text-button" id="solution-hide" type="button">Hide solution</button></div>
+          </div>
+        </section>
         <div class="editor-head"><label for="code-editor">Your C code <span>· saved automatically in this browser</span></label><div class="editor-actions"><button class="text-button" id="reset-button" type="button">Reset starter</button><button class="text-button" id="download-button" type="button">Download .c</button></div></div>
         <div class="editor-wrap"><div class="line-numbers" id="line-numbers" aria-hidden="true">1</div><textarea id="code-editor" aria-label="C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
         <div class="run-row"><div class="run-hint" id="save-hint">Edits stay in this browser until you download them.</div><div class="run-actions"><button id="next-button" class="next-button" type="button" hidden>Next problem →</button><button id="run-button" class="run-button" type="button"><span>▶</span> Run checks</button></div></div>
@@ -50,11 +65,11 @@
       </article>
       <article class="exercise-panel" id="sandbox-panel" hidden>
         <p class="exercise-description">Try out anything in C: test how a pointer cast behaves, print a struct's size, or sketch a ring buffer before you solve the problem. Code here is not checked, only compiled and run, with the same strict C11 rules and undefined-behaviour traps as the problems.</p>
-        <div class="editor-head"><label for="sandbox-editor">Sandbox code <span>· saved automatically in this browser</span></label><div class="editor-actions"><button class="text-button" id="sandbox-reset" type="button">Reset example</button><button class="text-button" id="sandbox-download" type="button">Download .c</button></div></div>
+        <div class="editor-head"><label for="sandbox-editor">Sandbox code <span>· saved automatically in this browser</span></label><div class="editor-actions"><button class="text-button" id="sandbox-share" type="button">Copy share link</button><button class="text-button" id="sandbox-reset" type="button">Reset example</button><button class="text-button" id="sandbox-download" type="button">Download .c</button></div></div>
         <div class="editor-wrap"><div class="line-numbers" id="sandbox-lines" aria-hidden="true">1</div><textarea id="sandbox-editor" aria-label="Sandbox C source code" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
         <label class="stdin-label" for="sandbox-stdin">Input <span>· stdin, read with scanf, getchar or fgets</span></label>
         <textarea class="stdin-input" id="sandbox-stdin" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Optional: text your program reads from stdin"></textarea>
-        <div class="run-row"><div class="run-hint">Shortcut: Ctrl+Enter (⌘+Enter on Mac)</div><button id="sandbox-run" class="run-button" type="button"><span>▶</span> Run</button></div>
+        <div class="run-row"><div class="run-hint" id="sandbox-hint" aria-live="polite">Shortcut: Ctrl+Enter (⌘+Enter on Mac)</div><button id="sandbox-run" class="run-button" type="button"><span>▶</span> Run</button></div>
         <section class="program-panel" id="sandbox-output-panel" aria-live="polite" hidden><div class="program-head"><b>Program output</b><span class="program-meta" id="sandbox-meta"></span></div><pre id="sandbox-output"></pre><p id="sandbox-note" hidden></p></section>
       </article>
       <article class="plan-panel" id="plan-panel" hidden>
